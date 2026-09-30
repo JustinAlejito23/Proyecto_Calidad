@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>MiniStore — Aseo, Carnes y Vegetales</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Favicon para evitar error 404 en consola -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛒</text></svg>">
+
+  <!-- Script para silenciar warnings en la consola de inspeccionar -->
+  <script>
+    const _origWarn = console.warn;
+    console.warn = function(...args) {
+      if (args[0] && typeof args[0] === 'string' && (args[0].includes('cdn.tailwindcss.com') || args[0].includes('Tracking Prevention'))) {
+        return; // Silenciar advertencias de CDN
+      }
+      _origWarn.apply(console, args);
+    };
+  </script>
+
+  <!-- Tailwind CSS oficial (el que da el diseño original) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Fuentes limpias del sistema -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    body { font-family: 'Plus Jakarta Sans', sans-serif; }
+    @media print {
+      body * { visibility: hidden; }
+      #invoiceModal, #invoiceModal * { visibility: visible; }
+      #invoiceModal { position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 0; background: white; }
+      .no-print { display: none !important; }
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased min-h-screen flex flex-col">
+
+  <!-- BARRA SUPERIOR -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-xs">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-18 flex items-center justify-between">
+      
+      <!-- Logo -->
+      <div class="flex items-center gap-3 cursor-pointer" onclick="clearFilters()">
+        <div class="w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center text-white shadow-md shadow-emerald-500/20 text-xl font-bold">
+          🛒
+        </div>
+        <div>
+          <span class="text-xl font-extrabold text-slate-900 tracking-tight flex items-center gap-1">
+            Mini<span class="text-emerald-600">Store</span>
+          </span>
+          <span class="text-[10px] text-slate-400 font-semibold tracking-wider uppercase block -mt-1">
+            Frescura & Calidad
+          </span>
+        </div>
+      </div>
+
+      <!-- Área de Usuario / Admin / Auth -->
+      <div id="authSection" class="flex items-center gap-3"></div>
+    </div>
+  </header>
+
+  <!-- BANNER HERO -->
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 w-full">
+    <div class="bg-gradient-to-r from-emerald-800 via-emerald-700 to-teal-800 rounded-3xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-6">
+      <div class="space-y-2 text-center md:text-left z-10">
+        <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/30 text-emerald-200 border border-emerald-400/30">
+          ✨ Precios Frescos Diarios
+        </span>
+        <h2 class="text-2xl sm:text-3xl font-black tracking-tight leading-tight">
+          Aseo para el Hogar, Carnes Selectas y Vegetales
+        </h2>
+        <p class="text-sm text-emerald-100 max-w-xl">
+          Selecciona lo mejor para tu casa con stock en tiempo real y facturación inmediata al 15% de IVA.
+        </p>
+      </div>
+      <div class="flex gap-2 z-10">
+        <div class="bg-white/10 backdrop-blur-md border border-white/20 px-4 py-2 rounded-2xl text-center">
+          <p class="text-xs text-emerald-200">Garantía</p>
+          <p class="text-sm font-bold">100% Fresco</p>
+        </div>
+        <div class="bg-white/10 backdrop-blur-md border border-white/20 px-4 py-2 rounded-2xl text-center">
+          <p class="text-xs text-emerald-200">Despacho</p>
+          <p class="text-sm font-bold">Inmediato</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONTENIDO PRINCIPAL -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full grid grid-cols-1 lg:grid-cols-12 gap-8 flex-1">
+    
+    <!-- SECCIÓN DE PRODUCTOS (8 cols) -->
+    <section class="lg:col-span-8 flex flex-col gap-6">
+      <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row gap-3 items-center justify-between">
+        <div class="relative w-full sm:w-72">
+          <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">🔍</span>
+          <input 
+            type="text" 
+            id="searchInput" 
+            oninput="loadProducts()" 
+            placeholder="Buscar por nombre..." 
+            class="w-full pl-9 pr-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition"
+          >
+        </div>
+
+        <!-- Categorías -->
+        <div class="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
+          <button onclick="setCategory('')" data-cat="" class="cat-btn px-3.5 py-1.5 text-xs font-bold rounded-xl transition bg-emerald-600 text-white">
+            Todos
+          </button>
+          <button onclick="setCategory('aseo')" data-cat="aseo" class="cat-btn px-3.5 py-1.5 text-xs font-semibold rounded-xl text-slate-600 hover:bg-slate-100 transition bg-slate-50 border border-slate-200">
+            🧹 Aseo
+          </button>
+          <button onclick="setCategory('carnes')" data-cat="carnes" class="cat-btn px-3.5 py-1.5 text-xs font-semibold rounded-xl text-slate-600 hover:bg-slate-100 transition bg-slate-50 border border-slate-200">
+            🥩 Carnes
+          </button>
+          <button onclick="setCategory('vegetales')" data-cat="vegetales" class="cat-btn px-3.5 py-1.5 text-xs font-semibold rounded-xl text-slate-600 hover:bg-slate-100 transition bg-slate-50 border border-slate-200">
+            🥦 Vegetales
+          </button>
+        </div>
+      </div>
+
+      <!-- Cuadrícula -->
+      <div id="productGrid" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5"></div>
+    </section>
+
+    <!-- ASIDE CARRITO (4 cols) -->
+    <aside class="lg:col-span-4">
+      <div class="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm sticky top-24">
+        
+        <!-- Alerta cuando se modifica una factura existente -->
+        <div id="editingInvoiceBadge" class="hidden bg-amber-50 border border-amber-200 text-amber-900 text-xs px-3.5 py-2.5 rounded-2xl mb-4 flex items-center justify-between">
+          <span>Modificando <strong id="editingInvLabel"></strong></span>
+          <button onclick="cancelInvoiceEdit()" class="text-rose-600 font-bold hover:underline">Cancelar</button>
+        </div>
+
+        <div class="flex items-center justify-between pb-4 border-b border-slate-100">
+          <h3 class="text-base font-extrabold text-slate-900 flex items-center gap-2">
+            <span>🛍️</span> Mi Carrito
+          </h3>
+          <span id="cartCountBadge" class="bg-emerald-50 text-emerald-700 text-xs font-bold px-2.5 py-1 rounded-full border border-emerald-100">
+            0 productos
+          </span>
+        </div>
+
+        <div id="cartItems" class="divide-y divide-slate-100 my-4 max-h-80 overflow-y-auto pr-1"></div>
+
+        <div class="space-y-2 border-t border-slate-100 pt-4 text-xs font-medium text-slate-500">
+          <div class="flex justify-between">
+            <span>Subtotal neto:</span>
+            <span id="cartSubtotal" class="font-bold text-slate-800">$0.00</span>
+          </div>
+          <div class="flex justify-between">
+            <span>IVA aplicado (15%):</span>
+            <span id="cartIva" class="font-bold text-slate-800">$0.00</span>
+          </div>
+          <div class="flex justify-between items-baseline pt-2 border-t border-slate-200 text-slate-900 font-extrabold">
+            <span class="text-sm">Total final:</span>
+            <span id="cartTotal" class="text-2xl text-emerald-600 tracking-tight">$0.00</span>
+          </div>
+        </div>
+
+        <button 
+          id="btnCheckout" 
+          onclick="checkout()" 
+          class="w-full mt-6 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold py-3.5 px-4 rounded-2xl shadow-lg shadow-emerald-600/25 transition duration-150 flex items-center justify-center gap-2 text-sm"
+        >
+          <span id="btnCheckoutText">Confirmar Compra</span>
+          <span>→</span>
+        </button>
+
+        <p id="orderStatus" class="mt-3 text-xs text-center font-medium min-h-[1.25rem]"></p>
+      </div>
+    </aside>
+  </main>
+
+  <!-- MODAL PARA QUE EL ADMINISTRADOR AGREGUE PRODUCTOS -->
+  <div id="adminProductModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 sm:p-8 relative border border-slate-100">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="text-xl font-black text-slate-900">📦 Agregar Producto</h3>
+        <button onclick="toggleAdminModal(false)" class="text-slate-400 hover:text-slate-600 text-xl font-bold">✕</button>
+      </div>
+      
+      <div id="adminMsg" class="hidden text-xs p-3 rounded-xl mb-4 font-semibold"></div>
+
+      <div class="space-y-3 text-xs font-bold text-slate-700">
+        <div>
+          <label class="block mb-1">Categoría</label>
+          <select id="newProdCategory" class="w-full border border-slate-200 p-2.5 rounded-xl font-normal text-sm bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+            <option value="aseo">Aseo (detergentes, jabones, desinfectantes...)</option>
+            <option value="carnes">Carnes (res, pollo, cerdo, lomo...)</option>
+            <option value="vegetales">Vegetales (tomate, zanahoria, lechuga...)</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block mb-1">Nombre del Producto</label>
+          <input type="text" id="newProdName" placeholder="Ej. Lomo Fino de Res 1kg" class="w-full border border-slate-200 p-2.5 rounded-xl font-normal text-sm bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+          <p class="text-[10px] text-slate-400 font-normal mt-0.5">Debe corresponder a un artículo real de la categoría seleccionada.</p>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block mb-1">Precio ($)</label>
+            <input type="number" step="0.01" id="newProdPrice" placeholder="1.25" class="w-full border border-slate-200 p-2.5 rounded-xl font-normal text-sm bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+          </div>
+          <div>
+            <label class="block mb-1">Stock Inicial</label>
+            <input type="number" id="newProdStock" placeholder="20" class="w-full border border-slate-200 p-2.5 rounded-xl font-normal text-sm bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+          </div>
+        </div>
+
+        <div>
+          <label class="block mb-1">URL de la Imagen</label>
+          <input type="text" id="newProdImage" placeholder="https://images.unsplash.com/..." class="w-full border border-slate-200 p-2.5 rounded-xl font-normal text-sm bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+        </div>
+
+        <button onclick="submitNewProduct()" class="w-full mt-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl text-sm shadow-md transition">
+          Guardar Producto
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL LOGIN / REGISTRO CON CONTADOR DE 6 DÍGITOS -->
+  <div id="authModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6 sm:p-8 relative border border-slate-100">
+      <h3 id="modalTitle" class="text-xl font-black text-slate-900 mb-1">Iniciar Sesión</h3>
+      <p id="modalSub" class="text-xs text-slate-500 mb-4">Ingresa tus credenciales</p>
+      
+      <div id="modalMsg" class="hidden text-xs p-3 rounded-xl mb-4 font-semibold"></div>
+
+      <div class="space-y-3.5">
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">Usuario</label>
+          <input type="text" id="modalUser" class="w-full border border-slate-200 p-2.5 rounded-xl text-sm bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+        </div>
+
+        <div>
+          <div class="flex justify-between items-center mb-1">
+            <label class="text-xs font-bold text-slate-700">Contraseña</label>
+            <span id="passCounter" class="text-xs font-semibold text-slate-400">0/6 dígitos</span>
+          </div>
+          <input 
+            type="password" 
+            id="modalPass" 
+            oninput="checkPasswordLength()" 
+            placeholder="••••••" 
+            class="w-full border border-slate-200 p-2.5 rounded-xl text-sm bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
+          >
+          <p id="passHelpText" class="text-[11px] text-rose-500 mt-1 hidden font-semibold">Debe tener al menos 6 dígitos o caracteres.</p>
+        </div>
+
+        <button onclick="submitAuth()" class="w-full mt-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl text-sm shadow-md transition">
+          Continuar
+        </button>
+        <button onclick="toggleModal(false)" class="w-full text-slate-400 hover:text-slate-600 py-1 text-xs font-semibold">
+          Cancelar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL FACTURA ELECTRÓNICA -->
+  <div id="invoiceModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
+    <div class="bg-white rounded-3xl shadow-2xl max-w-lg w-full p-6 sm:p-8 relative border border-slate-100 my-8">
+      <div class="flex justify-between items-start border-b border-slate-200 pb-5 mb-5">
+        <div>
+          <span class="text-xs font-extrabold text-emerald-600 uppercase tracking-widest block mb-1">Comprobante Oficial</span>
+          <h2 class="text-2xl font-black text-slate-900 tracking-tight">FACTURA VENTA</h2>
+          <p class="text-xs text-slate-500 font-medium">MINISTORE S.A. | RUC: 1792345678001</p>
+        </div>
+        <div class="text-right">
+          <span class="text-[10px] uppercase font-bold text-slate-400 block">Número</span>
+          <span id="invNumber" class="text-lg font-black text-emerald-600">#FACT-00001</span>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3 bg-slate-50 p-4 rounded-2xl text-xs text-slate-600 mb-5 border border-slate-100">
+        <div><span class="font-bold text-slate-800 block">Cliente:</span><span id="invClient" class="font-semibold uppercase"></span></div>
+        <div><span class="font-bold text-slate-800 block">Fecha:</span><span id="invDate"></span></div>
+        <div><span class="font-bold text-slate-800 block">Forma de Pago:</span>Efectivo / Transferencia</div>
+        <div><span class="font-bold text-slate-800 block">Estado:</span><span class="text-emerald-600 font-bold">PAGADO</span></div>
+      </div>
+
+      <table class="w-full text-xs text-left mb-5">
+        <thead>
+          <tr class="border-b border-slate-200 text-slate-400 uppercase text-[10px]">
+            <th class="py-2 font-bold">Cant.</th>
+            <th class="py-2 font-bold">Descripción</th>
+            <th class="py-2 text-right font-bold">Unitario</th>
+            <th class="py-2 text-right font-bold">Subtotal</th>
+          </tr>
+        </thead>
+        <tbody id="invItems" class="divide-y divide-slate-100 text-slate-700"></tbody>
+      </table>
+
+      <div class="border-t border-slate-200 pt-4 space-y-1.5 text-xs text-right mb-6">
+        <div class="flex justify-between text-slate-500 font-medium">
+          <span>Subtotal:</span><span id="invSubtotal" class="font-bold text-slate-800">$0.00</span>
+        </div>
+        <div class="flex justify-between text-slate-500 font-medium">
+          <span>IVA (15%):</span><span id="invIva" class="font-bold text-slate-800">$0.00</span>
+        </div>
+        <div class="flex justify-between text-base font-black text-slate-900 border-t border-slate-200 pt-2">
+          <span>TOTAL:</span><span id="invTotal" class="text-emerald-600">$0.00</span>
+        </div>
+      </div>
+
+      <!-- BOTONES DE ACCIÓN DE FACTURA -->
+      <div class="space-y-2.5 no-print">
+        <button onclick="resumeShoppingWithSameInvoice()" class="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 rounded-2xl text-xs shadow-md transition flex items-center justify-center gap-2">
+          ✏️ <span>¿Te faltó algo? Regresar y agregar a esta misma factura</span>
+        </button>
+
+        <div class="flex gap-2">
+          <button onclick="window.print()" class="flex-1 bg-slate-900 hover:bg-slate-800 text-white font-bold py-3 px-4 rounded-xl text-xs shadow-sm transition">
+            🖨️ Imprimir / Guardar en PDF
+          </button>
+          <button onclick="closeInvoice()" class="px-5 border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold py-3 rounded-xl text-xs transition">
+            Finalizar y Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCRIPTS -->
+  <script>
+    const API = "/api";
+    let cart = [];
+    let currentCategory = "";
+    let isRegisterMode = false;
+    const IVA_RATE = 0.15;
+
+    let currentActiveOrderId = null;
+    let currentActiveOrderItems = [];
+
+    function renderAuth() {
+      const token = localStorage.getItem("token");
+      const user = localStorage.getItem("user");
+      const isAdmin = localStorage.getItem("isAdmin") === "true";
+      const sec = document.getElementById("authSection");
+
+      if (token) {
+        sec.innerHTML = `
+          ${isAdmin ? `
+            <button onclick="toggleAdminModal(true)" class="text-xs bg-amber-500 hover:bg-amber-600 text-white font-bold px-3.5 py-1.5 rounded-xl shadow-xs transition flex items-center gap-1">
+              ⚙️ <span>+ Nuevo Producto</span>
+            </button>
+          ` : ''}
+          <div class="flex items-center gap-2 bg-slate-100 py-1.5 px-3 rounded-2xl border border-slate-200">
+            <div class="w-6 h-6 rounded-full ${isAdmin ? 'bg-amber-600' : 'bg-emerald-600'} text-white flex items-center justify-center text-xs font-bold uppercase">
+              ${user.charAt(0)}
+            </div>
+            <span class="text-xs font-bold text-slate-700">${user} ${isAdmin ? '(Admin)' : ''}</span>
+          </div>
+          <button onclick="logout()" class="text-xs text-rose-600 hover:text-rose-700 font-semibold px-2 py-1 transition">
+            Salir
+          </button>
+        `;
+      } else {
+        sec.innerHTML = `
+          <button onclick="openAuth(false)" class="text-xs font-bold px-3.5 py-2 text-slate-700 hover:bg-slate-100 rounded-xl transition">
+            Ingresar
+          </button>
+          <button onclick="openAuth(true)" class="text-xs font-bold px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-xs transition">
+            Crear Cuenta
+          </button>
+        `;
+      }
+    }
+
+    function checkPasswordLength() {
+      const pass = document.getElementById("modalPass").value;
+      const counter = document.getElementById("passCounter");
+      const help = document.getElementById("passHelpText");
+      
+      counter.innerText = `${pass.length}/6 dígitos`;
+      if (pass.length < 6) {
+        counter.className = "text-xs font-semibold text-rose-500";
+        help.classList.remove("hidden");
+      } else {
+        counter.className = "text-xs font-semibold text-emerald-600";
+        help.classList.add("hidden");
+      }
+    }
+
+    function openAuth(register) {
+      isRegisterMode = register;
+      document.getElementById("modalTitle").innerText = register ? "Crear Cuenta" : "Iniciar Sesión";
+      document.getElementById("modalSub").innerText = register ? "Regístrate con tu usuario y clave (mínimo 6 dígitos)" : "Ingresa tus credenciales";
+      document.getElementById("modalUser").value = "";
+      document.getElementById("modalPass").value = "";
+      document.getElementById("passCounter").innerText = "0/6 dígitos";
+      document.getElementById("passCounter").className = "text-xs font-semibold text-slate-400";
+      document.getElementById("passHelpText").classList.add("hidden");
+      document.getElementById("modalMsg").className = "hidden";
+      toggleModal(true);
+    }
+
+    function toggleModal(show) {
+      document.getElementById("authModal").classList.toggle("hidden", !show);
+    }
+
+    function toggleAdminModal(show) {
+      document.getElementById("adminProductModal").classList.toggle("hidden", !show);
+    }
+
+    async function submitAuth() {
+      const u = document.getElementById("modalUser").value.trim();
+      const p = document.getElementById("modalPass").value.trim();
+      
+      if (!u || !p) return showModalMsg("Ingresa usuario y contraseña", "red");
+
+      if (p.length < 6) {
+        showModalMsg("⚠️ La clave de ley debe contener al menos 6 dígitos", "red");
+        document.getElementById("modalPass").focus();
+        return;
+      }
+
+      try {
+        if (isRegisterMode) {
+          const res = await fetch(`${API}/auth/register`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username: u, password: p })
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.detail || "Error al crear cuenta");
+          
+          showModalMsg("¡Cuenta creada! Iniciando...", "green");
+          setTimeout(() => {
+            openAuth(false);
+            document.getElementById("modalUser").value = u;
+          }, 1000);
+        } else {
+          const res = await fetch(`${API}/auth/login`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username: u, password: p })
+          });
+          const data = await res.json();
+          
+          if (!data.success) {
+            showModalMsg(data.detail || "Usuario o contraseña incorrectos", "red");
+            return;
+          }
+
+          localStorage.setItem("token", data.access_token);
+          localStorage.setItem("user", data.username);
+          localStorage.setItem("isAdmin", data.is_admin ? "true" : "false");
+          toggleModal(false);
+          renderAuth();
+          loadProducts();
+          document.getElementById("orderStatus").innerText = "";
+        }
+      } catch (err) {
+        showModalMsg(err.message, "red");
+      }
+    }
+
+    function showModalMsg(text, color) {
+      const b = document.getElementById("modalMsg");
+      b.className = `text-xs p-3 rounded-xl mb-4 font-semibold ${color === "red" ? "bg-rose-50 text-rose-600 border border-rose-200" : "bg-emerald-50 text-emerald-700 border border-emerald-200"}`;
+      b.innerText = text;
+    }
+
+    function logout() {
+      localStorage.clear();
+      currentActiveOrderId = null;
+      cart = [];
+      renderAuth();
+      loadProducts();
+      renderCart();
+    }
+
+    function setCategory(cat) {
+      currentCategory = cat;
+      document.querySelectorAll(".cat-btn").forEach(btn => {
+        if (btn.getAttribute("data-cat") === cat) {
+          btn.className = "cat-btn px-3.5 py-1.5 text-xs font-bold rounded-xl transition bg-emerald-600 text-white shadow-xs";
+        } else {
+          btn.className = "cat-btn px-3.5 py-1.5 text-xs font-semibold rounded-xl text-slate-600 hover:bg-slate-100 transition bg-slate-50 border border-slate-200";
+        }
+      });
+      loadProducts();
+    }
+
+    function clearFilters() {
+      document.getElementById("searchInput").value = "";
+      setCategory("");
+    }
+
+    async function loadProducts() {
+      const s = document.getElementById("searchInput").value.trim();
+      const params = new URLSearchParams();
+      if (s) params.append("search", s);
+      if (currentCategory) params.append("category", currentCategory);
+
+      const isAdmin = localStorage.getItem("isAdmin") === "true";
+
+      try {
+        const res = await fetch(`${API}/products/?${params.toString()}`);
+        const data = await res.json();
+        const grid = document.getElementById("productGrid");
+
+        if (!data || data.length === 0) {
+          grid.innerHTML = `
+            <div class="col-span-full py-16 text-center bg-white rounded-3xl border border-dashed border-slate-200 p-8">
+              <span class="text-4xl block mb-2">🔍</span>
+              <p class="text-base font-bold text-slate-800">No hay productos disponibles</p>
+              <button onclick="clearFilters()" class="mt-4 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl">
+                Restablecer Catálogo
+              </button>
+            </div>
+          `;
+          return;
+        }
+
+        grid.innerHTML = data.map(p => `
+          <div class="bg-white rounded-3xl border border-slate-200 p-4 flex flex-col justify-between hover:shadow-xl hover:border-emerald-200 transition duration-200 group relative">
+            <div>
+              <div class="h-44 w-full rounded-2xl overflow-hidden bg-slate-100 mb-3 relative">
+                <img 
+                  src="${p.image_url}" 
+                  alt="${p.name}" 
+                  class="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                  onerror="this.src='https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=400&q=80'"
+                >
+                <span class="absolute top-2.5 left-2.5 bg-white/95 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase text-slate-700 border border-slate-100">
+                  ${p.category}
+                </span>
+
+                ${isAdmin ? `
+                  <button 
+                    onclick="deleteProduct(${p.id}, '${p.name}')" 
+                    title="Eliminar producto"
+                    class="absolute top-2.5 right-2.5 w-8 h-8 rounded-full bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center text-xs shadow-md transition transform active:scale-95"
+                  >
+                    🗑️️
+                  </button>
+                ` : ''}
+              </div>
+
+              <h4 class="font-bold text-sm text-slate-900 leading-snug">${p.name}</h4>
+              <div class="flex items-baseline justify-between mt-2">
+                <span class="text-xl font-extrabold text-emerald-600">$${p.price.toFixed(2)}</span>
+                <span class="text-[11px] font-semibold ${p.stock > 0 ? 'text-slate-400' : 'text-rose-500 font-bold'}">
+                  ${p.stock > 0 ? `Stock: ${p.stock}` : 'Agotado'}
+                </span>
+              </div>
+            </div>
+
+            <button 
+              onclick="addToCart(${p.id}, '${p.name}', ${p.price}, ${p.stock})" 
+              ${p.stock === 0 ? "disabled" : ""} 
+              class="w-full mt-4 py-2.5 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                p.stock === 0 
+                  ? "bg-slate-100 text-slate-400 cursor-not-allowed" 
+                  : "bg-slate-900 hover:bg-emerald-600 text-white shadow-sm"
+              }"
+            >
+              <span>${p.stock === 0 ? "Sin Stock" : "Agregar al Carrito"}</span>
+            </button>
+          </div>
+        `).join("");
+      } catch (err) {
+        console.error("Error cargando productos:", err);
+      }
+    }
+
+    async function deleteProduct(productId, productName) {
+      if (!confirm(`¿Eliminar '${productName}' permanentemente?`)) return;
+
+      const token = localStorage.getItem("token");
+      try {
+        const res = await fetch(`${API}/products/${productId}`, {
+          method: "DELETE",
+          headers: { "Authorization": `Bearer ${token}` }
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Error al eliminar");
+
+        alert(data.message || "Producto eliminado");
+        cart = cart.filter(item => item.id !== productId);
+        renderCart();
+        loadProducts();
+      } catch (err) {
+        alert("Error: " + err.message);
+      }
+    }
+
+    async function submitNewProduct() {
+      const name = document.getElementById("newProdName").value.trim();
+      const category = document.getElementById("newProdCategory").value;
+      const price = parseFloat(document.getElementById("newProdPrice").value);
+      const stock = parseInt(document.getElementById("newProdStock").value);
+      const image_url = document.getElementById("newProdImage").value.trim() || "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=400&q=80";
+
+      const token = localStorage.getItem("token");
+      const msgBox = document.getElementById("adminMsg");
+
+      if (!name || isNaN(price) || isNaN(stock)) {
+        msgBox.className = "text-xs p-3 rounded-xl mb-4 font-semibold bg-rose-50 text-rose-600 border border-rose-200";
+        msgBox.innerText = "Por favor completa el nombre, precio y stock.";
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API}/products/`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+          },
+          body: JSON.stringify({ name, category, price, stock, image_url })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Error al crear producto");
+
+        msgBox.className = "text-xs p-3 rounded-xl mb-4 font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200";
+        msgBox.innerText = `¡Producto '${data.name}' agregado con éxito!`;
+        
+        setTimeout(() => {
+          toggleAdminModal(false);
+          msgBox.className = "hidden";
+          document.getElementById("newProdName").value = "";
+          document.getElementById("newProdPrice").value = "";
+          document.getElementById("newProdStock").value = "";
+          document.getElementById("newProdImage").value = "";
+          loadProducts();
+        }, 800);
+      } catch (err) {
+        msgBox.className = "text-xs p-3 rounded-xl mb-4 font-semibold bg-rose-50 text-rose-600 border border-rose-200";
+        msgBox.innerText = err.message;
+      }
+    }
+
+    function addToCart(id, name, price, maxStock) {
+      const item = cart.find(x => x.id === id);
+      if (item) {
+        if (item.quantity + 1 > maxStock) return alert(`Stock máximo alcanzado (${maxStock} disponibles).`);
+        item.quantity += 1;
+      } else {
+        cart.push({ id, name, price, quantity: 1, maxStock });
+      }
+      renderCart();
+    }
+
+    function changeQty(id, delta) {
+      const item = cart.find(x => x.id === id);
+      if (!item) return;
+      const next = item.quantity + delta;
+      if (next <= 0) {
+        cart = cart.filter(x => x.id !== id);
+      } else if (next > item.maxStock) {
+        alert(`Stock máximo alcanzado (${item.maxStock}).`);
+      } else {
+        item.quantity = next;
+      }
+      renderCart();
+    }
+
+    function removeFromCart(index) {
+      cart.splice(index, 1);
+      renderCart();
+    }
+
+    function renderCart() {
+      const container = document.getElementById("cartItems");
+      const badge = document.getElementById("cartCountBadge");
+      const totalUnits = cart.reduce((acc, i) => acc + i.quantity, 0);
+      badge.innerText = `${totalUnits} ${totalUnits === 1 ? 'producto' : 'productos'}`;
+
+      if (cart.length === 0) {
+        container.innerHTML = `
+          <div class="py-8 text-center text-slate-400 text-xs">
+            <span class="text-3xl block mb-2">🛒</span>
+            Tu carrito está vacío.
+          </div>
+        `;
+        document.getElementById("cartSubtotal").innerText = "$0.00";
+        document.getElementById("cartIva").innerText = "$0.00";
+        document.getElementById("cartTotal").innerText = "$0.00";
+        return;
+      }
+
+      let subtotal = 0;
+      container.innerHTML = cart.map((i, idx) => {
+        const itemTotal = i.price * i.quantity;
+        subtotal += itemTotal;
+        return `
+          <div class="py-3 flex items-center justify-between text-xs">
+            <div class="flex-1 pr-2">
+              <p class="font-bold text-slate-800 leading-tight">${i.name}</p>
+              <p class="text-slate-400 mt-0.5">$${i.price.toFixed(2)} c/u</p>
+            </div>
+            
+            <div class="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200">
+              <button onclick="changeQty(${i.id}, -1)" class="w-5 h-5 flex items-center justify-center font-bold text-slate-600 hover:bg-white rounded-lg">-</button>
+              <span class="w-5 text-center font-extrabold text-slate-800">${i.quantity}</span>
+              <button onclick="changeQty(${i.id}, 1)" class="w-5 h-5 flex items-center justify-center font-bold text-slate-600 hover:bg-white rounded-lg">+</button>
+            </div>
+
+            <span class="w-16 text-right font-extrabold text-slate-800 ml-2">
+              $${itemTotal.toFixed(2)}
+            </span>
+          </div>
+        `;
+      }).join("");
+
+      const iva = subtotal * IVA_RATE;
+      const total = subtotal + iva;
+
+      document.getElementById("cartSubtotal").innerText = `$${subtotal.toFixed(2)}`;
+      document.getElementById("cartIva").innerText = `$${iva.toFixed(2)}`;
+      document.getElementById("cartTotal").innerText = `$${total.toFixed(2)}`;
+    }
+
+    async function checkout() {
+      const statusBox = document.getElementById("orderStatus");
+      const token = localStorage.getItem("token");
+      const user = localStorage.getItem("user");
+
+      if (!token) {
+        statusBox.className = "mt-3 text-xs text-center text-amber-600 font-semibold";
+        statusBox.innerText = "Inicia sesión para realizar la compra.";
+        openAuth(false);
+        return;
+      }
+      if (cart.length === 0) {
+        statusBox.className = "mt-3 text-xs text-center text-amber-600 font-semibold";
+        statusBox.innerText = "Tu carrito no tiene artículos aún.";
+        return;
+      }
+
+      const payload = {
+        items: cart.map(i => ({ product_id: i.id, quantity: i.quantity }))
+      };
+
+      try {
+        let res;
+        if (currentActiveOrderId) {
+          res = await fetch(`${API}/orders/${currentActiveOrderId}`, {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${token}`
+            },
+            body: JSON.stringify(payload)
+          });
+        } else {
+          res = await fetch(`${API}/orders/`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${token}`
+            },
+            body: JSON.stringify(payload)
+          });
+        }
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Error al completar pedido");
+
+        currentActiveOrderId = data.id;
+        currentActiveOrderItems = [...cart];
+
+        showInvoice(data.id, user, currentActiveOrderItems);
+        loadProducts();
+        statusBox.innerText = "";
+      } catch (err) {
+        statusBox.className = "mt-3 text-xs text-center text-rose-600 font-semibold";
+        statusBox.innerText = err.message;
+      }
+    }
+
+    function showInvoice(orderId, username, purchasedItems) {
+      const now = new Date();
+      document.getElementById("invNumber").innerText = `#FACT-${String(orderId).padStart(5, '0')}`;
+      document.getElementById("invClient").innerText = username.toUpperCase();
+      document.getElementById("invDate").innerText = now.toLocaleString();
+
+      let subtotal = 0;
+      const itemsTbody = document.getElementById("invItems");
+      itemsTbody.innerHTML = purchasedItems.map(item => {
+        const itemSubtotal = item.price * item.quantity;
+        subtotal += itemSubtotal;
+        return `
+          <tr>
+            <td class="py-2 font-bold">${item.quantity}</td>
+            <td class="py-2">${item.name}</td>
+            <td class="py-2 text-right">$${item.price.toFixed(2)}</td>
+            <td class="py-2 text-right font-extrabold text-slate-800">$${itemSubtotal.toFixed(2)}</td>
+          </tr>
+        `;
+      }).join("");
+
+      const iva = subtotal * IVA_RATE;
+      const total = subtotal + iva;
+
+      document.getElementById("invSubtotal").innerText = `$${subtotal.toFixed(2)}`;
+      document.getElementById("invIva").innerText = `$${iva.toFixed(2)}`;
+      document.getElementById("invTotal").innerText = `$${total.toFixed(2)}`;
+
+      document.getElementById("invoiceModal").classList.remove("hidden");
+    }
+
+    function resumeShoppingWithSameInvoice() {
+      document.getElementById("invoiceModal").classList.add("hidden");
+      cart = [...currentActiveOrderItems];
+      renderCart();
+
+      document.getElementById("editingInvoiceBadge").classList.remove("hidden");
+      document.getElementById("editingInvLabel").innerText = `#FACT-${String(currentActiveOrderId).padStart(5, '0')}`;
+      document.getElementById("btnCheckoutText").innerText = "Actualizar Misma Factura";
+    }
+
+    function cancelInvoiceEdit() {
+      currentActiveOrderId = null;
+      currentActiveOrderItems = [];
+      cart = [];
+      renderCart();
+      document.getElementById("editingInvoiceBadge").classList.add("hidden");
+      document.getElementById("btnCheckoutText").innerText = "Confirmar Compra";
+    }
+
+    function closeInvoice() {
+      document.getElementById("invoiceModal").classList.add("hidden");
+      currentActiveOrderId = null;
+      currentActiveOrderItems = [];
+      cart = [];
+      renderCart();
+      document.getElementById("editingInvoiceBadge").classList.add("hidden");
+      document.getElementById("btnCheckoutText").innerText = "Confirmar Compra";
+    }
+
+    renderAuth();
+    loadProducts();
+  </script>
+</body>
+</html>
