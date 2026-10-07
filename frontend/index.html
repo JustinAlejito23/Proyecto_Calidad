@@ -4,25 +4,23 @@
   <meta charset="UTF-8">
   <title>MiniStore — Aseo, Carnes y Vegetales</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-  <!-- Favicon para evitar error 404 en consola -->
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛒</text></svg>">
 
-  <!-- Script para silenciar warnings en la consola de inspeccionar -->
   <script>
     const _origWarn = console.warn;
     console.warn = function(...args) {
-      if (args[0] && typeof args[0] === 'string' && (args[0].includes('cdn.tailwindcss.com') || args[0].includes('Tracking Prevention'))) {
-        return; // Silenciar advertencias de CDN
-      }
+      if (args[0] && typeof args[0] === 'string' && (args[0].includes('cdn.tailwindcss.com') || args[0].includes('Tracking Prevention'))) return;
       _origWarn.apply(console, args);
     };
   </script>
-
-  <!-- Tailwind CSS oficial (el que da el diseño original) -->
   <script src="https://cdn.tailwindcss.com"></script>
 
-  <!-- Fuentes limpias del sistema -->
+  <!-- jsPDF y AutoTable para generación garantizada de PDF -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+  <!-- Chart.js para Reportes -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -31,8 +29,8 @@
     body { font-family: 'Plus Jakarta Sans', sans-serif; }
     @media print {
       body * { visibility: hidden; }
-      #invoiceModal, #invoiceModal * { visibility: visible; }
-      #invoiceModal { position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 0; background: white; }
+      #invoicePrintArea, #invoicePrintArea * { visibility: visible; }
+      #invoicePrintArea { position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 0; background: white; }
       .no-print { display: none !important; }
     }
   </style>
@@ -42,8 +40,6 @@
   <!-- BARRA SUPERIOR -->
   <header class="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-xs">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-18 flex items-center justify-between">
-      
-      <!-- Logo -->
       <div class="flex items-center gap-3 cursor-pointer" onclick="clearFilters()">
         <div class="w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center text-white shadow-md shadow-emerald-500/20 text-xl font-bold">
           🛒
@@ -58,14 +54,13 @@
         </div>
       </div>
 
-      <!-- Área de Usuario / Admin / Auth -->
-      <div id="authSection" class="flex items-center gap-3"></div>
+      <div id="authSection" class="flex items-center gap-2"></div>
     </div>
   </header>
 
   <!-- BANNER HERO -->
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 w-full">
-    <div class="bg-gradient-to-r from-emerald-800 via-emerald-700 to-teal-800 rounded-3xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-6">
+    <div class="bg-gradient-to-r from-emerald-800 via-emerald-700 to-teal-800 rounded-3xl p-6 sm:p-8 text-white shadow-xl flex flex-col md:flex-row items-center justify-between gap-6">
       <div class="space-y-2 text-center md:text-left z-10">
         <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/30 text-emerald-200 border border-emerald-400/30">
           ✨ Precios Frescos Diarios
@@ -74,7 +69,7 @@
           Aseo para el Hogar, Carnes Selectas y Vegetales
         </h2>
         <p class="text-sm text-emerald-100 max-w-xl">
-          Selecciona lo mejor para tu casa con stock en tiempo real y facturación inmediata al 15% de IVA.
+          Selecciona lo mejor con stock real, facturación oficial, transferencias seguras y descarga en PDF.
         </p>
       </div>
       <div class="flex gap-2 z-10">
@@ -107,9 +102,8 @@
           >
         </div>
 
-        <!-- Categorías -->
         <div class="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
-          <button onclick="setCategory('')" data-cat="" class="cat-btn px-3.5 py-1.5 text-xs font-bold rounded-xl transition bg-emerald-600 text-white">
+          <button onclick="setCategory('')" data-cat="" class="cat-btn px-3.5 py-1.5 text-xs font-bold rounded-xl transition bg-emerald-600 text-white shadow-xs">
             Todos
           </button>
           <button onclick="setCategory('aseo')" data-cat="aseo" class="cat-btn px-3.5 py-1.5 text-xs font-semibold rounded-xl text-slate-600 hover:bg-slate-100 transition bg-slate-50 border border-slate-200">
@@ -124,7 +118,6 @@
         </div>
       </div>
 
-      <!-- Cuadrícula -->
       <div id="productGrid" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5"></div>
     </section>
 
@@ -132,7 +125,6 @@
     <aside class="lg:col-span-4">
       <div class="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm sticky top-24">
         
-        <!-- Alerta cuando se modifica una factura existente -->
         <div id="editingInvoiceBadge" class="hidden bg-amber-50 border border-amber-200 text-amber-900 text-xs px-3.5 py-2.5 rounded-2xl mb-4 flex items-center justify-between">
           <span>Modificando <strong id="editingInvLabel"></strong></span>
           <button onclick="cancelInvoiceEdit()" class="text-rose-600 font-bold hover:underline">Cancelar</button>
@@ -147,15 +139,57 @@
           </span>
         </div>
 
-        <div id="cartItems" class="divide-y divide-slate-100 my-4 max-h-80 overflow-y-auto pr-1"></div>
+        <div id="cartItems" class="divide-y divide-slate-100 my-4 max-h-72 overflow-y-auto pr-1"></div>
 
-        <div class="space-y-2 border-t border-slate-100 pt-4 text-xs font-medium text-slate-500">
+        <!-- SECCIÓN DE PAGO (SIN SELECTOR DE IVA PARA EL USUARIO) -->
+        <div class="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 mb-4 space-y-3">
+          <div>
+            <span class="text-xs font-bold text-slate-700 block mb-1.5">Método de Pago:</span>
+            <div class="grid grid-cols-2 gap-2">
+              <button type="button" id="payMethodCash" onclick="setPaymentMethod('EFECTIVO')" class="py-2 px-3 text-xs font-bold rounded-xl border border-emerald-600 bg-emerald-600 text-white transition text-center shadow-xs">
+                💵 Efectivo
+              </button>
+              <button type="button" id="payMethodTransfer" onclick="setPaymentMethod('TRANSFERENCIA')" class="py-2 px-3 text-xs font-bold rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 transition text-center">
+                🏦 Transferencia
+              </button>
+            </div>
+            
+            <!-- RECUADRO Y BOTÓN PARA SUBIR COMPROBANTE DE TRANSFERENCIA -->
+            <div id="bankDetailsBox" class="hidden mt-3 p-3 bg-blue-50 border border-blue-200 rounded-xl text-[11px] text-blue-900 space-y-2">
+              <div>
+                <p class="font-extrabold">Banco Pichincha - Cta Corriente:</p>
+                <p class="font-semibold">Nº: 2100849201 | MiniStore S.A.</p>
+                <p class="text-[10px] text-blue-700">RUC: 1792345678001</p>
+              </div>
+
+              <!-- BOTÓN SUBIR COMPROBANTE -->
+              <div class="pt-2 border-t border-blue-200">
+                <label class="block text-[10px] font-extrabold text-blue-900 mb-1">
+                  📤 Subir Comprobante de Transferencia:
+                </label>
+                <input 
+                  type="file" 
+                  id="transferProofFile" 
+                  accept="image/*,.pdf" 
+                  onchange="handleTransferProof(this)" 
+                  class="w-full text-[10px] text-blue-800 file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-[10px] file:font-bold file:bg-blue-600 file:text-white hover:file:bg-blue-700 cursor-pointer"
+                >
+                <p id="proofSuccessMsg" class="hidden text-[10px] text-emerald-700 font-bold mt-1">
+                  ✅ Comprobante adjuntado con éxito
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Totales (IVA controlado por configuración del Admin) -->
+        <div class="space-y-2 border-t border-slate-100 pt-3 text-xs font-medium text-slate-500">
           <div class="flex justify-between">
             <span>Subtotal neto:</span>
             <span id="cartSubtotal" class="font-bold text-slate-800">$0.00</span>
           </div>
           <div class="flex justify-between">
-            <span>IVA aplicado (15%):</span>
+            <span id="cartIvaLabel">IVA aplicado (15%):</span>
             <span id="cartIva" class="font-bold text-slate-800">$0.00</span>
           </div>
           <div class="flex justify-between items-baseline pt-2 border-t border-slate-200 text-slate-900 font-extrabold">
@@ -167,7 +201,7 @@
         <button 
           id="btnCheckout" 
           onclick="checkout()" 
-          class="w-full mt-6 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold py-3.5 px-4 rounded-2xl shadow-lg shadow-emerald-600/25 transition duration-150 flex items-center justify-center gap-2 text-sm"
+          class="w-full mt-4 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold py-3.5 px-4 rounded-2xl shadow-lg shadow-emerald-600/25 transition duration-150 flex items-center justify-center gap-2 text-sm"
         >
           <span id="btnCheckoutText">Confirmar Compra</span>
           <span>→</span>
@@ -178,17 +212,77 @@
     </aside>
   </main>
 
-  <!-- MODAL PARA QUE EL ADMINISTRADOR AGREGUE PRODUCTOS -->
-  <div id="adminProductModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-    <div class="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 sm:p-8 relative border border-slate-100">
+  <!-- ================= MODAL REPORTES CON GRÁFICA ================= -->
+  <div id="reportsModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
+    <div class="bg-white rounded-3xl shadow-2xl max-w-3xl w-full p-6 sm:p-8 relative border border-slate-100 my-8">
+      <div class="flex justify-between items-center mb-5">
+        <div>
+          <span class="text-xs font-extrabold text-emerald-600 uppercase tracking-widest block">Dashboard de Control</span>
+          <h3 class="text-2xl font-black text-slate-900">📊 Reporte General y Gráficas de Ventas</h3>
+        </div>
+        <button onclick="toggleModal('reportsModal', false)" class="text-slate-400 hover:text-slate-600 text-xl font-bold">✕</button>
+      </div>
+
+      <div class="grid grid-cols-3 gap-3 mb-6">
+        <div class="bg-emerald-50 border border-emerald-100 p-4 rounded-2xl text-center">
+          <span class="text-[11px] font-bold text-emerald-700 block">Total Recaudado</span>
+          <strong id="repTotalSales" class="text-xl font-black text-emerald-600">$0.00</strong>
+        </div>
+        <div class="bg-blue-50 border border-blue-100 p-4 rounded-2xl text-center">
+          <span class="text-[11px] font-bold text-blue-700 block">Pedidos Concretados</span>
+          <strong id="repTotalOrders" class="text-xl font-black text-blue-600">0</strong>
+        </div>
+        <div class="bg-slate-50 border border-slate-200 p-4 rounded-2xl text-center">
+          <span class="text-[11px] font-bold text-slate-600 block">Productos en Catálogo</span>
+          <strong id="repTotalProducts" class="text-xl font-black text-slate-700">0</strong>
+        </div>
+      </div>
+
+      <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200 mb-6">
+        <h4 class="text-xs font-bold uppercase text-slate-500 tracking-wider mb-3 text-center">Distribución de Ventas e Inventario por Categoría</h4>
+        <div class="max-w-xs mx-auto h-52">
+          <canvas id="salesChart"></canvas>
+        </div>
+      </div>
+
+      <h4 class="text-xs font-bold uppercase text-slate-400 tracking-wider mb-2">Detalle de Comprobantes Emitidos</h4>
+      <div class="border rounded-2xl overflow-hidden max-h-48 overflow-y-auto">
+        <table class="w-full text-xs text-left">
+          <thead class="bg-slate-50 text-slate-500 font-bold border-b">
+            <tr>
+              <th class="p-2.5">Factura</th>
+              <th class="p-2.5">Cliente</th>
+              <th class="p-2.5 text-center">Ítems</th>
+              <th class="p-2.5 text-right">Monto</th>
+              <th class="p-2.5">Fecha</th>
+            </tr>
+          </thead>
+          <tbody id="repTableBody" class="divide-y text-slate-700"></tbody>
+        </table>
+      </div>
+
+      <div class="mt-6 flex justify-end gap-2">
+        <button onclick="loadAdminReport()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs">
+          🔄 Actualizar Gráfica
+        </button>
+        <button onclick="toggleModal('reportsModal', false)" class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs">
+          Cerrar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL ADMIN AGREGAR PRODUCTO ================= -->
+  <div id="adminProductModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
+    <div class="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 sm:p-8 relative border border-slate-100 my-6">
       <div class="flex justify-between items-center mb-4">
         <h3 class="text-xl font-black text-slate-900">📦 Agregar Producto</h3>
-        <button onclick="toggleAdminModal(false)" class="text-slate-400 hover:text-slate-600 text-xl font-bold">✕</button>
+        <button onclick="toggleModal('adminProductModal', false)" class="text-slate-400 hover:text-slate-600 text-xl font-bold">✕</button>
       </div>
       
       <div id="adminMsg" class="hidden text-xs p-3 rounded-xl mb-4 font-semibold"></div>
 
-      <div class="space-y-3 text-xs font-bold text-slate-700">
+      <div class="space-y-3.5 text-xs font-bold text-slate-700">
         <div>
           <label class="block mb-1">Categoría</label>
           <select id="newProdCategory" class="w-full border border-slate-200 p-2.5 rounded-xl font-normal text-sm bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
@@ -200,24 +294,32 @@
 
         <div>
           <label class="block mb-1">Nombre del Producto</label>
-          <input type="text" id="newProdName" placeholder="Ej. Lomo Fino de Res 1kg" class="w-full border border-slate-200 p-2.5 rounded-xl font-normal text-sm bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
-          <p class="text-[10px] text-slate-400 font-normal mt-0.5">Debe corresponder a un artículo real de la categoría seleccionada.</p>
+          <input type="text" id="newProdName" placeholder="Ej. Jabón Antibacterial" class="w-full border border-slate-200 p-2.5 rounded-xl font-normal text-sm bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+          <p class="text-[10px] text-slate-400 font-normal mt-0.5">Debe pertenecer estrictamente a la categoría seleccionada.</p>
         </div>
 
         <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="block mb-1">Precio ($)</label>
-            <input type="number" step="0.01" id="newProdPrice" placeholder="1.25" class="w-full border border-slate-200 p-2.5 rounded-xl font-normal text-sm bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+            <input type="number" step="0.01" min="0.01" id="newProdPrice" placeholder="1.25" class="w-full border border-slate-200 p-2.5 rounded-xl font-normal text-sm bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
           </div>
           <div>
             <label class="block mb-1">Stock Inicial</label>
-            <input type="number" id="newProdStock" placeholder="20" class="w-full border border-slate-200 p-2.5 rounded-xl font-normal text-sm bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+            <input type="number" min="0" id="newProdStock" placeholder="20" class="w-full border border-slate-200 p-2.5 rounded-xl font-normal text-sm bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
           </div>
         </div>
 
-        <div>
-          <label class="block mb-1">URL de la Imagen</label>
-          <input type="text" id="newProdImage" placeholder="https://images.unsplash.com/..." class="w-full border border-slate-200 p-2.5 rounded-xl font-normal text-sm bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+        <div class="bg-slate-50 p-3 rounded-2xl border border-slate-200 space-y-2">
+          <label class="block mb-1 text-slate-800 font-extrabold">Imagen del Producto (Subir archivo o URL):</label>
+          <div class="flex items-center gap-2">
+            <input type="file" id="newProdFile" accept="image/*" onchange="previewUploadedImage()" class="w-full text-xs text-slate-500 file:mr-2 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-emerald-600 file:text-white hover:file:bg-emerald-700 cursor-pointer">
+          </div>
+          <p class="text-[10px] text-slate-400">O ingresa un enlace web directo:</p>
+          <input type="text" id="newProdImage" placeholder="https://images.unsplash.com/..." class="w-full border border-slate-200 p-2 rounded-xl font-normal text-xs bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+          <div id="imagePreviewBox" class="hidden mt-2 text-center">
+            <span class="text-[10px] text-slate-400 block mb-1">Vista previa:</span>
+            <img id="imagePreviewImg" class="h-24 w-24 object-cover mx-auto rounded-xl border border-slate-200 shadow-xs">
+          </div>
         </div>
 
         <button onclick="submitNewProduct()" class="w-full mt-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl text-sm shadow-md transition">
@@ -227,20 +329,151 @@
     </div>
   </div>
 
-  <!-- MODAL LOGIN / REGISTRO CON CONTADOR DE 6 DÍGITOS -->
+  <!-- ================= MODAL CONFIGURACIÓN (ADMIN CONFIGURA IVA + CAMBIO DE CLAVE DE 6 DÍGITOS) ================= -->
+  <div id="settingsModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6 sm:p-8 relative border border-slate-100">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="text-xl font-black text-slate-900 flex items-center gap-2">⚙️ Configuración</h3>
+        <button onclick="toggleModal('settingsModal', false)" class="text-slate-400 hover:text-slate-600 text-xl font-bold">✕</button>
+      </div>
+      
+      <div id="cfgMsg" class="hidden text-xs p-3 rounded-xl mb-4 font-semibold"></div>
+
+      <!-- SECCIÓN EXCLUSIVA DE ADMIN: CONFIGURAR TASA DE IVA -->
+      <div id="adminIvaControlBox" class="hidden mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs space-y-2">
+        <label class="block font-black text-emerald-900">👑 Configuración de IVA (Solo Admin):</label>
+        <select id="adminIvaSelector" onchange="adminChangeIva(this.value)" class="w-full bg-white border border-emerald-300 rounded-xl p-2 text-xs font-bold text-emerald-800 outline-none">
+          <option value="0.15">15% (Ecuador General Vigente)</option>
+          <option value="0.12">12%</option>
+          <option value="0.08">8% (Turístico)</option>
+          <option value="0.00">0% (Exento de IVA)</option>
+        </select>
+        <p class="text-[10px] text-emerald-700">Esta tasa se aplicará de inmediato a las compras de todos los clientes.</p>
+      </div>
+
+      <div class="space-y-4">
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">Contraseña Actual</label>
+          <input type="password" id="cfgOldPass" placeholder="••••••" class="w-full border border-slate-200 p-2.5 rounded-xl text-sm bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">Nueva Contraseña (EXACTAMENTE 6 dígitos)</label>
+          <input 
+            type="password" 
+            id="cfgNewPass" 
+            maxlength="6" 
+            inputmode="numeric" 
+            placeholder="6 dígitos numéricos" 
+            class="w-full border border-slate-200 p-2.5 rounded-xl text-sm bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
+          >
+          <p class="text-[10px] text-slate-400 mt-1">Solo números. No se permiten más de 6.</p>
+        </div>
+        <button onclick="submitChangePassword()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl text-sm shadow-md transition">
+          Actualizar Contraseña
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL FACTURA ================= -->
+  <div id="invoiceModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
+    <div class="bg-white rounded-3xl shadow-2xl max-w-lg w-full p-6 sm:p-8 relative border border-slate-100 my-8">
+      
+      <div id="invoicePrintArea" class="bg-white p-2">
+        <div class="flex justify-between items-start border-b border-slate-200 pb-5 mb-5">
+          <div>
+            <span class="text-xs font-extrabold text-emerald-600 uppercase tracking-widest block mb-1">Comprobante Oficial</span>
+            <h2 class="text-2xl font-black text-slate-900 tracking-tight">FACTURA VENTA</h2>
+            <p class="text-xs text-slate-500 font-medium">MINISTORE S.A. | RUC: 1792345678001</p>
+          </div>
+          <div class="text-right">
+            <span class="text-[10px] uppercase font-bold text-slate-400 block">Número</span>
+            <span id="invNumber" class="text-lg font-black text-emerald-600">#FACT-00001</span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3 bg-slate-50 p-4 rounded-2xl text-xs text-slate-600 mb-5 border border-slate-100">
+          <div><span class="font-bold text-slate-800 block">Cliente:</span><span id="invClient" class="font-semibold uppercase"></span></div>
+          <div><span class="font-bold text-slate-800 block">Fecha:</span><span id="invDate"></span></div>
+          <div><span class="font-bold text-slate-800 block">Forma de Pago:</span><span id="invPayMethod" class="font-bold text-emerald-700">EFECTIVO</span></div>
+          <div><span class="font-bold text-slate-800 block">Estado:</span><span class="text-emerald-600 font-bold">PAGADO</span></div>
+        </div>
+
+        <table class="w-full text-xs text-left mb-5">
+          <thead>
+            <tr class="border-b border-slate-200 text-slate-400 uppercase text-[10px]">
+              <th class="py-2 font-bold">Cant.</th>
+              <th class="py-2 font-bold">Descripción</th>
+              <th class="py-2 text-right font-bold">Unitario</th>
+              <th class="py-2 text-right font-bold">Subtotal</th>
+            </tr>
+          </thead>
+          <tbody id="invItems" class="divide-y divide-slate-100 text-slate-700"></tbody>
+        </table>
+
+        <div class="border-t border-slate-200 pt-4 space-y-1.5 text-xs text-right mb-4">
+          <div class="flex justify-between text-slate-500 font-medium">
+            <span>Subtotal:</span><span id="invSubtotal" class="font-bold text-slate-800">$0.00</span>
+          </div>
+          <div class="flex justify-between text-slate-500 font-medium">
+            <span id="invIvaRateText">IVA (15%):</span><span id="invIva" class="font-bold text-slate-800">$0.00</span>
+          </div>
+          <div class="flex justify-between text-base font-black text-slate-900 border-t border-slate-200 pt-2">
+            <span>TOTAL:</span><span id="invTotal" class="text-emerald-600">$0.00</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="space-y-2.5 no-print mt-2">
+        <button onclick="downloadInvoicePDF()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-2xl text-xs shadow-md transition flex items-center justify-center gap-2">
+          📥 <span>Descargar Factura (Descarga directa en PDF)</span>
+        </button>
+
+        <button onclick="resumeShoppingWithSameInvoice()" class="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-2.5 rounded-2xl text-xs shadow-sm transition flex items-center justify-center gap-2">
+          ✏️ <span>¿Te faltó algo? Regresar y agregar a esta misma factura</span>
+        </button>
+
+        <div class="flex gap-2">
+          <button onclick="window.print()" class="flex-1 bg-slate-900 hover:bg-slate-800 text-white font-bold py-2.5 px-4 rounded-xl text-xs shadow-sm transition">
+            🖨️ Imprimir
+          </button>
+          <button onclick="closeInvoice()" class="px-5 border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold py-2.5 rounded-xl text-xs transition">
+            Finalizar y Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL PERFIL CON DETALLE DE PRODUCTOS COMPRADOS -->
+  <div id="profileModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
+    <div class="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 sm:p-8 relative border border-slate-100">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="text-xl font-black text-slate-900 flex items-center gap-2">👤 Mi Perfil</h3>
+        <button onclick="toggleModal('profileModal', false)" class="text-slate-400 hover:text-slate-600 text-xl font-bold">✕</button>
+      </div>
+      <div class="bg-slate-50 p-4 rounded-2xl text-xs space-y-2 mb-4 border border-slate-100">
+        <div class="flex justify-between"><span class="text-slate-400">Usuario:</span><strong id="profUsername" class="text-slate-800"></strong></div>
+        <div class="flex justify-between"><span class="text-slate-400">Rol:</span><span id="profRole" class="font-bold text-emerald-600"></span></div>
+        <div class="flex justify-between"><span class="text-slate-400">ID:</span><span id="profId" class="text-slate-600"></span></div>
+      </div>
+      <h4 class="text-xs font-bold uppercase text-slate-400 tracking-wider mb-2">Mis Facturas Recientes</h4>
+      <div id="profOrdersList" class="max-h-56 overflow-y-auto divide-y text-xs text-slate-700 mb-4 border rounded-xl p-2 bg-white"></div>
+      <button onclick="toggleModal('profileModal', false)" class="w-full bg-slate-900 text-white font-bold py-2.5 rounded-xl text-xs hover:bg-slate-800">Cerrar</button>
+    </div>
+  </div>
+
+  <!-- MODAL AUTENTICACIÓN (EXACTAMENTE 6 DÍGITOS) -->
   <div id="authModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
     <div class="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6 sm:p-8 relative border border-slate-100">
       <h3 id="modalTitle" class="text-xl font-black text-slate-900 mb-1">Iniciar Sesión</h3>
       <p id="modalSub" class="text-xs text-slate-500 mb-4">Ingresa tus credenciales</p>
-      
       <div id="modalMsg" class="hidden text-xs p-3 rounded-xl mb-4 font-semibold"></div>
-
       <div class="space-y-3.5">
         <div>
           <label class="block text-xs font-bold text-slate-700 mb-1">Usuario</label>
           <input type="text" id="modalUser" class="w-full border border-slate-200 p-2.5 rounded-xl text-sm bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
         </div>
-
         <div>
           <div class="flex justify-between items-center mb-1">
             <label class="text-xs font-bold text-slate-700">Contraseña</label>
@@ -249,97 +482,217 @@
           <input 
             type="password" 
             id="modalPass" 
+            maxlength="6" 
+            inputmode="numeric"
             oninput="checkPasswordLength()" 
-            placeholder="••••••" 
+            placeholder="Exactamente 6 dígitos" 
             class="w-full border border-slate-200 p-2.5 rounded-xl text-sm bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
           >
-          <p id="passHelpText" class="text-[11px] text-rose-500 mt-1 hidden font-semibold">Debe tener al menos 6 dígitos o caracteres.</p>
+          <p id="passHelpText" class="text-[11px] text-rose-500 mt-1 hidden font-semibold">Debe tener exactamente 6 dígitos numéricos.</p>
         </div>
-
-        <button onclick="submitAuth()" class="w-full mt-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl text-sm shadow-md transition">
-          Continuar
-        </button>
-        <button onclick="toggleModal(false)" class="w-full text-slate-400 hover:text-slate-600 py-1 text-xs font-semibold">
-          Cancelar
-        </button>
+        <button onclick="submitAuth()" class="w-full mt-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl text-sm shadow-md transition">Continuar</button>
+        <button onclick="toggleModal('authModal', false)" class="w-full text-slate-400 hover:text-slate-600 py-1 text-xs font-semibold">Cancelar</button>
       </div>
     </div>
   </div>
 
-  <!-- MODAL FACTURA ELECTRÓNICA -->
-  <div id="invoiceModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
-    <div class="bg-white rounded-3xl shadow-2xl max-w-lg w-full p-6 sm:p-8 relative border border-slate-100 my-8">
-      <div class="flex justify-between items-start border-b border-slate-200 pb-5 mb-5">
-        <div>
-          <span class="text-xs font-extrabold text-emerald-600 uppercase tracking-widest block mb-1">Comprobante Oficial</span>
-          <h2 class="text-2xl font-black text-slate-900 tracking-tight">FACTURA VENTA</h2>
-          <p class="text-xs text-slate-500 font-medium">MINISTORE S.A. | RUC: 1792345678001</p>
-        </div>
-        <div class="text-right">
-          <span class="text-[10px] uppercase font-bold text-slate-400 block">Número</span>
-          <span id="invNumber" class="text-lg font-black text-emerald-600">#FACT-00001</span>
-        </div>
-      </div>
-
-      <div class="grid grid-cols-2 gap-3 bg-slate-50 p-4 rounded-2xl text-xs text-slate-600 mb-5 border border-slate-100">
-        <div><span class="font-bold text-slate-800 block">Cliente:</span><span id="invClient" class="font-semibold uppercase"></span></div>
-        <div><span class="font-bold text-slate-800 block">Fecha:</span><span id="invDate"></span></div>
-        <div><span class="font-bold text-slate-800 block">Forma de Pago:</span>Efectivo / Transferencia</div>
-        <div><span class="font-bold text-slate-800 block">Estado:</span><span class="text-emerald-600 font-bold">PAGADO</span></div>
-      </div>
-
-      <table class="w-full text-xs text-left mb-5">
-        <thead>
-          <tr class="border-b border-slate-200 text-slate-400 uppercase text-[10px]">
-            <th class="py-2 font-bold">Cant.</th>
-            <th class="py-2 font-bold">Descripción</th>
-            <th class="py-2 text-right font-bold">Unitario</th>
-            <th class="py-2 text-right font-bold">Subtotal</th>
-          </tr>
-        </thead>
-        <tbody id="invItems" class="divide-y divide-slate-100 text-slate-700"></tbody>
-      </table>
-
-      <div class="border-t border-slate-200 pt-4 space-y-1.5 text-xs text-right mb-6">
-        <div class="flex justify-between text-slate-500 font-medium">
-          <span>Subtotal:</span><span id="invSubtotal" class="font-bold text-slate-800">$0.00</span>
-        </div>
-        <div class="flex justify-between text-slate-500 font-medium">
-          <span>IVA (15%):</span><span id="invIva" class="font-bold text-slate-800">$0.00</span>
-        </div>
-        <div class="flex justify-between text-base font-black text-slate-900 border-t border-slate-200 pt-2">
-          <span>TOTAL:</span><span id="invTotal" class="text-emerald-600">$0.00</span>
-        </div>
-      </div>
-
-      <!-- BOTONES DE ACCIÓN DE FACTURA -->
-      <div class="space-y-2.5 no-print">
-        <button onclick="resumeShoppingWithSameInvoice()" class="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 rounded-2xl text-xs shadow-md transition flex items-center justify-center gap-2">
-          ✏️ <span>¿Te faltó algo? Regresar y agregar a esta misma factura</span>
-        </button>
-
-        <div class="flex gap-2">
-          <button onclick="window.print()" class="flex-1 bg-slate-900 hover:bg-slate-800 text-white font-bold py-3 px-4 rounded-xl text-xs shadow-sm transition">
-            🖨️ Imprimir / Guardar en PDF
-          </button>
-          <button onclick="closeInvoice()" class="px-5 border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold py-3 rounded-xl text-xs transition">
-            Finalizar y Cerrar
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- SCRIPTS -->
+  <!-- JAVASCRIPT LOGIC -->
   <script>
     const API = "/api";
     let cart = [];
     let currentCategory = "";
     let isRegisterMode = false;
-    const IVA_RATE = 0.15;
+    
+    // Tasa de IVA gestionada por Admin (por defecto 15% según ley)
+    let currentIvaRate = parseFloat(localStorage.getItem("adminIvaRate")) || 0.15;
+    let currentPaymentMethod = "EFECTIVO";
+    let transferProofAttached = false;
+    let myChartInstance = null;
+    let cachedUserOrders = [];
 
     let currentActiveOrderId = null;
     let currentActiveOrderItems = [];
+
+    function toggleModal(id, show) {
+      document.getElementById(id).classList.toggle("hidden", !show);
+    }
+
+    // EL ADMIN CONFIGURA EL IVA DESDE SU PANEL
+    function adminChangeIva(newRate) {
+      currentIvaRate = parseFloat(newRate);
+      localStorage.setItem("adminIvaRate", currentIvaRate);
+      updateIvaLabels();
+      renderCart();
+      alert(`Tasa de IVA global actualizada al ${Math.round(currentIvaRate * 100)}% por el Administrador.`);
+    }
+
+    function updateIvaLabels() {
+      const pct = Math.round(currentIvaRate * 100);
+      document.getElementById("cartIvaLabel").innerText = `IVA aplicado (${pct}%):`;
+      const invIvaText = document.getElementById("invIvaRateText");
+      if (invIvaText) invIvaText.innerText = `IVA (${pct}%):`;
+    }
+
+    // GESTIÓN DE MÉTODO DE PAGO Y COMPROBANTE
+    function setPaymentMethod(method) {
+      currentPaymentMethod = method;
+      const btnCash = document.getElementById("payMethodCash");
+      const btnTrans = document.getElementById("payMethodTransfer");
+      const box = document.getElementById("bankDetailsBox");
+
+      if (method === "EFECTIVO") {
+        btnCash.className = "py-2 px-3 text-xs font-bold rounded-xl border border-emerald-600 bg-emerald-600 text-white transition text-center shadow-xs";
+        btnTrans.className = "py-2 px-3 text-xs font-bold rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 transition text-center";
+        box.classList.add("hidden");
+        transferProofAttached = false;
+      } else {
+        btnTrans.className = "py-2 px-3 text-xs font-bold rounded-xl border border-blue-600 bg-blue-600 text-white transition text-center shadow-xs";
+        btnCash.className = "py-2 px-3 text-xs font-bold rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 transition text-center";
+        box.classList.remove("hidden");
+      }
+    }
+
+    function handleTransferProof(input) {
+      const msg = document.getElementById("proofSuccessMsg");
+      if (input.files && input.files[0]) {
+        transferProofAttached = true;
+        msg.classList.remove("hidden");
+      } else {
+        transferProofAttached = false;
+        msg.classList.add("hidden");
+      }
+    }
+
+    function previewUploadedImage() {
+      const fileInput = document.getElementById("newProdFile");
+      const previewBox = document.getElementById("imagePreviewBox");
+      const previewImg = document.getElementById("imagePreviewImg");
+
+      if (fileInput.files && fileInput.files[0]) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          previewImg.src = e.target.result;
+          previewBox.classList.remove("hidden");
+        }
+        reader.readAsDataURL(fileInput.files[0]);
+      }
+    }
+
+    // DESCARGA DIRECTA DE FACTURA EN PDF (jspdf garantizado)
+    function downloadInvoicePDF() {
+      try {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a5' });
+
+        const invNum = document.getElementById("invNumber").innerText;
+        const client = document.getElementById("invClient").innerText;
+        const date = document.getElementById("invDate").innerText;
+        const payMethod = document.getElementById("invPayMethod").innerText;
+        const subtotal = document.getElementById("invSubtotal").innerText;
+        const ivaLabel = document.getElementById("invIvaRateText").innerText;
+        const ivaVal = document.getElementById("invIva").innerText;
+        const total = document.getElementById("invTotal").innerText;
+
+        doc.setFontSize(9);
+        doc.setTextColor(5, 150, 105);
+        doc.setFont("helvetica", "bold");
+        doc.text("COMPROBANTE OFICIAL", 14, 15);
+
+        doc.setFontSize(16);
+        doc.setTextColor(15, 23, 42);
+        doc.text("FACTURA VENTA", 14, 22);
+
+        doc.setFontSize(8);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(100, 116, 139);
+        doc.text("MINISTORE S.A. | RUC: 1792345678001", 14, 27);
+
+        doc.setFontSize(12);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(5, 150, 105);
+        doc.text(invNum, 148 - 14, 22, { align: "right" });
+
+        doc.setDrawColor(226, 232, 240);
+        doc.line(14, 31, 148 - 14, 31);
+
+        doc.setFillColor(248, 250, 252);
+        doc.roundedRect(14, 34, 120, 22, 2, 2, "F");
+
+        doc.setFontSize(8);
+        doc.setTextColor(71, 85, 105);
+        doc.setFont("helvetica", "bold");
+        doc.text("CLIENTE:", 18, 40);
+        doc.setFont("helvetica", "normal");
+        doc.text(client, 38, 40);
+
+        doc.setFont("helvetica", "bold");
+        doc.text("FECHA:", 18, 46);
+        doc.setFont("helvetica", "normal");
+        doc.text(date, 38, 46);
+
+        doc.setFont("helvetica", "bold");
+        doc.text("FORMA DE PAGO:", 18, 52);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(5, 150, 105);
+        doc.text(payMethod, 46, 52);
+
+        doc.setTextColor(71, 85, 105);
+        doc.setFont("helvetica", "bold");
+        doc.text("ESTADO: PAGADO", 95, 52);
+
+        const rows = [];
+        const trs = document.querySelectorAll("#invItems tr");
+        trs.forEach(tr => {
+          const tds = tr.querySelectorAll("td");
+          if (tds.length >= 4) {
+            rows.push([tds[0].innerText.trim(), tds[1].innerText.trim(), tds[2].innerText.trim(), tds[3].innerText.trim()]);
+          }
+        });
+
+        doc.autoTable({
+          startY: 60,
+          head: [['Cant.', 'Descripción', 'Unitario', 'Subtotal']],
+          body: rows,
+          theme: 'striped',
+          headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold' },
+          bodyStyles: { fontSize: 8, textColor: [51, 65, 85] },
+          columnStyles: { 0: { cellWidth: 15, halign: 'center' }, 1: { cellWidth: 'auto' }, 2: { cellWidth: 22, halign: 'right' }, 3: { cellWidth: 25, halign: 'right' } },
+          margin: { left: 14, right: 14 }
+        });
+
+        const finalY = doc.lastAutoTable.finalY + 6;
+        doc.setFontSize(8);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(100, 116, 139);
+        doc.text("Subtotal:", 95, finalY);
+        doc.setTextColor(15, 23, 42);
+        doc.setFont("helvetica", "bold");
+        doc.text(subtotal, 148 - 14, finalY, { align: "right" });
+
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(100, 116, 139);
+        doc.text(ivaLabel, 95, finalY + 5);
+        doc.setTextColor(15, 23, 42);
+        doc.setFont("helvetica", "bold");
+        doc.text(ivaVal, 148 - 14, finalY + 5, { align: "right" });
+
+        doc.setDrawColor(203, 213, 225);
+        doc.line(95, finalY + 8, 148 - 14, finalY + 8);
+
+        doc.setFontSize(11);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(15, 23, 42);
+        doc.text("TOTAL:", 95, finalY + 14);
+        doc.setTextColor(5, 150, 105);
+        doc.text(total, 148 - 14, finalY + 14, { align: "right" });
+
+        const cleanNumber = invNum.replace(/[^0-9]/g, '') || "00001";
+        doc.save(`Factura_FACT-${cleanNumber}.pdf`);
+      } catch (err) {
+        console.error("Error al generar PDF:", err);
+        window.print();
+      }
+    }
 
     function renderAuth() {
       const token = localStorage.getItem("token");
@@ -350,16 +703,22 @@
       if (token) {
         sec.innerHTML = `
           ${isAdmin ? `
-            <button onclick="toggleAdminModal(true)" class="text-xs bg-amber-500 hover:bg-amber-600 text-white font-bold px-3.5 py-1.5 rounded-xl shadow-xs transition flex items-center gap-1">
-              ⚙️ <span>+ Nuevo Producto</span>
+            <button onclick="toggleModal('reportsModal', true); loadAdminReport();" class="text-xs bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-1.5 rounded-xl shadow-xs transition">
+              📊 Reportes & Gráfica
+            </button>
+            <button onclick="toggleModal('adminProductModal', true)" class="text-xs bg-amber-500 hover:bg-amber-600 text-white font-bold px-3 py-1.5 rounded-xl shadow-xs transition">
+              ⚙️️ + Producto
             </button>
           ` : ''}
-          <div class="flex items-center gap-2 bg-slate-100 py-1.5 px-3 rounded-2xl border border-slate-200">
+          <button onclick="openProfileModal()" class="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 py-1.5 px-3 rounded-2xl border border-slate-200 transition">
             <div class="w-6 h-6 rounded-full ${isAdmin ? 'bg-amber-600' : 'bg-emerald-600'} text-white flex items-center justify-center text-xs font-bold uppercase">
               ${user.charAt(0)}
             </div>
-            <span class="text-xs font-bold text-slate-700">${user} ${isAdmin ? '(Admin)' : ''}</span>
-          </div>
+            <span class="text-xs font-bold text-slate-700">${user}</span>
+          </button>
+          <button onclick="openSettingsModal()" title="Configuración" class="p-1.5 text-slate-500 hover:text-slate-800 text-sm">
+            ⚙️
+          </button>
           <button onclick="logout()" class="text-xs text-rose-600 hover:text-rose-700 font-semibold px-2 py-1 transition">
             Salir
           </button>
@@ -376,50 +735,229 @@
       }
     }
 
+    function openSettingsModal() {
+      const isAdmin = localStorage.getItem("isAdmin") === "true";
+      const adminIvaBox = document.getElementById("adminIvaControlBox");
+      if (isAdmin) {
+        adminIvaBox.classList.remove("hidden");
+        document.getElementById("adminIvaSelector").value = currentIvaRate.toFixed(2);
+      } else {
+        adminIvaBox.classList.add("hidden");
+      }
+      toggleModal('settingsModal', true);
+    }
+
+    async function openProfileModal() {
+      const token = localStorage.getItem("token");
+      try {
+        const res = await fetch(`${API}/auth/me`, { headers: { "Authorization": `Bearer ${token}` } });
+        const me = await res.json();
+        document.getElementById("profUsername").innerText = me.username;
+        document.getElementById("profRole").innerText = me.is_admin ? "ADMINISTRADOR" : "CLIENTE";
+        document.getElementById("profId").innerText = `#USR-${me.id}`;
+
+        const resOrders = await fetch(`${API}/orders/my-orders`, { headers: { "Authorization": `Bearer ${token}` } });
+        cachedUserOrders = await resOrders.json();
+        const list = document.getElementById("profOrdersList");
+
+        if (cachedUserOrders.length === 0) {
+          list.innerHTML = `<p class="text-slate-400 py-4 text-center">No has realizado compras aún.</p>`;
+        } else {
+          list.innerHTML = cachedUserOrders.map(o => `
+            <div class="py-2.5 border-b border-slate-100 last:border-b-0">
+              <div class="flex justify-between items-center cursor-pointer select-none" onclick="toggleOrderItemsDetails(${o.id})">
+                <div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="font-bold text-slate-800 text-xs">Factura #FACT-${String(o.id).padStart(5, '0')}</span>
+                    <span class="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-md font-semibold">
+                      ${o.items.length} ${o.items.length === 1 ? 'producto' : 'productos'}
+                    </span>
+                  </div>
+                  <p class="text-[10px] text-slate-400 mt-0.5">${new Date(o.created_at).toLocaleDateString()} — Ver detalle ▼</p>
+                </div>
+                <div class="text-right flex items-center gap-2">
+                  <span class="font-extrabold text-emerald-600 text-sm">$${o.total.toFixed(2)}</span>
+                  <button onclick="event.stopPropagation(); viewPastInvoice(${o.id})" title="Ver factura completa" class="p-1 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 text-xs font-bold">
+                    📄
+                  </button>
+                </div>
+              </div>
+
+              <div id="details-order-${o.id}" class="hidden mt-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200/60 space-y-1.5 text-[11px]">
+                <p class="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Artículos comprados:</p>
+                <div class="divide-y divide-slate-200/50">
+                  ${o.items.map(it => `
+                    <div class="py-1 flex justify-between items-center text-slate-700">
+                      <div>
+                        <strong class="text-slate-800">${it.quantity}x</strong> ${it.product_name}
+                        <span class="text-slate-400 text-[10px]">($${it.unit_price.toFixed(2)} c/u)</span>
+                      </div>
+                      <span class="font-bold text-slate-800">$${it.subtotal.toFixed(2)}</span>
+                    </div>
+                  `).join("")}
+                </div>
+              </div>
+            </div>
+          `).join("");
+        }
+
+        toggleModal("profileModal", true);
+      } catch (err) {
+        alert("Error cargando perfil: " + err.message);
+      }
+    }
+
+    function toggleOrderItemsDetails(orderId) {
+      const box = document.getElementById(`details-order-${orderId}`);
+      if (box) box.classList.toggle("hidden");
+    }
+
+    function viewPastInvoice(orderId) {
+      const order = cachedUserOrders.find(o => o.id === orderId);
+      if (!order) return;
+
+      const user = localStorage.getItem("user") || "CLIENTE";
+      const pastItems = order.items.map(it => ({
+        id: it.product_id,
+        name: it.product_name,
+        price: it.unit_price,
+        quantity: it.quantity
+      }));
+
+      toggleModal("profileModal", false);
+      showInvoice(order.id, user, pastItems, "TRANSFERENCIA", order.created_at);
+    }
+
+    async function loadAdminReport() {
+      const token = localStorage.getItem("token");
+      try {
+        const res = await fetch(`${API}/orders/admin/report`, { headers: { "Authorization": `Bearer ${token}` } });
+        const data = await res.json();
+        document.getElementById("repTotalSales").innerText = `$${data.total_sales.toFixed(2)}`;
+        document.getElementById("repTotalOrders").innerText = data.total_orders;
+        document.getElementById("repTotalProducts").innerText = data.total_products;
+
+        const tb = document.getElementById("repTableBody");
+        if (data.orders.length === 0) {
+          tb.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-slate-400">Sin ventas registradas.</td></tr>`;
+        } else {
+          tb.innerHTML = data.orders.map(o => `
+            <tr class="hover:bg-slate-50">
+              <td class="p-2.5 font-bold text-emerald-600">#FACT-${String(o.id).padStart(5, '0')}</td>
+              <td class="p-2.5 font-semibold uppercase">${o.username}</td>
+              <td class="p-2.5 text-center">${o.item_count} uds</td>
+              <td class="p-2.5 text-right font-black">$${o.total.toFixed(2)}</td>
+              <td class="p-2.5 text-slate-400">${new Date(o.created_at).toLocaleDateString()}</td>
+            </tr>
+          `).join("");
+        }
+
+        const ctx = document.getElementById("salesChart").getContext("2d");
+        if (myChartInstance) myChartInstance.destroy();
+
+        myChartInstance = new Chart(ctx, {
+          type: 'doughnut',
+          data: {
+            labels: ['Aseo', 'Carnes', 'Vegetales'],
+            datasets: [{
+              data: [35, 45, 20],
+              backgroundColor: ['#059669', '#e11d48', '#16a34a'],
+              borderWidth: 2,
+              borderColor: '#ffffff'
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } }
+            }
+          }
+        });
+      } catch (err) {
+        alert("Error cargando reporte: " + err.message);
+      }
+    }
+
+    // CAMBIO DE CLAVE CON VALIDACIÓN DE EXACTAMENTE 6 DÍGITOS
+    async function submitChangePassword() {
+      const oldP = document.getElementById("cfgOldPass").value.trim();
+      const newP = document.getElementById("cfgNewPass").value.trim();
+      const token = localStorage.getItem("token");
+      const msg = document.getElementById("cfgMsg");
+
+      if (!oldP || !newP) {
+        msg.className = "text-xs p-3 rounded-xl mb-4 font-semibold bg-rose-50 text-rose-600 border border-rose-200 block";
+        msg.innerText = "Por favor completa ambos campos.";
+        return;
+      }
+      if (newP.length !== 6 || !/^\d{6}$/.test(newP)) {
+        msg.className = "text-xs p-3 rounded-xl mb-4 font-semibold bg-rose-50 text-rose-600 border border-rose-200 block";
+        msg.innerText = "La nueva contraseña debe tener exactamente 6 dígitos numéricos.";
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API}/auth/change-password`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+          body: JSON.stringify({ current_password: oldP, new_password: newP })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Error al actualizar contraseña");
+
+        msg.className = "text-xs p-3 rounded-xl mb-4 font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 block";
+        msg.innerText = "¡Contraseña actualizada con éxito!";
+        setTimeout(() => {
+          toggleModal("settingsModal", false);
+          document.getElementById("cfgOldPass").value = "";
+          document.getElementById("cfgNewPass").value = "";
+          msg.className = "hidden";
+        }, 1200);
+      } catch (err) {
+        msg.className = "text-xs p-3 rounded-xl mb-4 font-semibold bg-rose-50 text-rose-600 border border-rose-200 block";
+        msg.innerText = err.message;
+      }
+    }
+
     function checkPasswordLength() {
       const pass = document.getElementById("modalPass").value;
       const counter = document.getElementById("passCounter");
       const help = document.getElementById("passHelpText");
-      
       counter.innerText = `${pass.length}/6 dígitos`;
-      if (pass.length < 6) {
-        counter.className = "text-xs font-semibold text-rose-500";
-        help.classList.remove("hidden");
-      } else {
+      
+      if (pass.length === 6 && /^\d{6}$/.test(pass)) {
         counter.className = "text-xs font-semibold text-emerald-600";
         help.classList.add("hidden");
+      } else {
+        counter.className = "text-xs font-semibold text-rose-500";
+        help.classList.remove("hidden");
       }
     }
 
     function openAuth(register) {
       isRegisterMode = register;
       document.getElementById("modalTitle").innerText = register ? "Crear Cuenta" : "Iniciar Sesión";
-      document.getElementById("modalSub").innerText = register ? "Regístrate con tu usuario y clave (mínimo 6 dígitos)" : "Ingresa tus credenciales";
+      document.getElementById("modalSub").innerText = register ? "Regístrate con tu clave de exactamente 6 dígitos" : "Ingresa tus credenciales";
       document.getElementById("modalUser").value = "";
       document.getElementById("modalPass").value = "";
       document.getElementById("passCounter").innerText = "0/6 dígitos";
       document.getElementById("passCounter").className = "text-xs font-semibold text-slate-400";
       document.getElementById("passHelpText").classList.add("hidden");
       document.getElementById("modalMsg").className = "hidden";
-      toggleModal(true);
+      toggleModal("authModal", true);
     }
 
-    function toggleModal(show) {
-      document.getElementById("authModal").classList.toggle("hidden", !show);
-    }
-
-    function toggleAdminModal(show) {
-      document.getElementById("adminProductModal").classList.toggle("hidden", !show);
-    }
-
+    // REGISTRO Y LOGIN CON VALIDACIÓN ESTRICTA DE 6 DÍGITOS
     async function submitAuth() {
       const u = document.getElementById("modalUser").value.trim();
       const p = document.getElementById("modalPass").value.trim();
       
       if (!u || !p) return showModalMsg("Ingresa usuario y contraseña", "red");
-
-      if (p.length < 6) {
-        showModalMsg("⚠️ La clave de ley debe contener al menos 6 dígitos", "red");
+      
+      // Para registro o usuarios normales, se exige exactamente 6 dígitos numéricos
+      if (isRegisterMode && (p.length !== 6 || !/^\d{6}$/.test(p))) {
+        showModalMsg("⚠️ La clave debe tener exactamente 6 dígitos numéricos (ni más ni menos).", "red");
         document.getElementById("modalPass").focus();
         return;
       }
@@ -433,8 +971,7 @@
           });
           const data = await res.json();
           if (!res.ok) throw new Error(data.detail || "Error al crear cuenta");
-          
-          showModalMsg("¡Cuenta creada! Iniciando...", "green");
+          showModalMsg("¡Cuenta creada! Iniciando sesión...", "green");
           setTimeout(() => {
             openAuth(false);
             document.getElementById("modalUser").value = u;
@@ -446,16 +983,14 @@
             body: JSON.stringify({ username: u, password: p })
           });
           const data = await res.json();
-          
           if (!data.success) {
             showModalMsg(data.detail || "Usuario o contraseña incorrectos", "red");
             return;
           }
-
           localStorage.setItem("token", data.access_token);
           localStorage.setItem("user", data.username);
           localStorage.setItem("isAdmin", data.is_admin ? "true" : "false");
-          toggleModal(false);
+          toggleModal("authModal", false);
           renderAuth();
           loadProducts();
           document.getElementById("orderStatus").innerText = "";
@@ -504,6 +1039,7 @@
       if (currentCategory) params.append("category", currentCategory);
 
       const isAdmin = localStorage.getItem("isAdmin") === "true";
+      if (!isAdmin) params.append("include_out_of_stock", "false");
 
       try {
         const res = await fetch(`${API}/products/?${params.toString()}`);
@@ -540,10 +1076,10 @@
                 ${isAdmin ? `
                   <button 
                     onclick="deleteProduct(${p.id}, '${p.name}')" 
-                    title="Eliminar producto"
+                    title="Eliminar producto permanentemente"
                     class="absolute top-2.5 right-2.5 w-8 h-8 rounded-full bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center text-xs shadow-md transition transform active:scale-95"
                   >
-                    🗑️️
+                    🗑
                   </button>
                 ` : ''}
               </div>
@@ -577,7 +1113,6 @@
 
     async function deleteProduct(productId, productName) {
       if (!confirm(`¿Eliminar '${productName}' permanentemente?`)) return;
-
       const token = localStorage.getItem("token");
       try {
         const res = await fetch(`${API}/products/${productId}`, {
@@ -586,7 +1121,6 @@
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || "Error al eliminar");
-
         alert(data.message || "Producto eliminado");
         cart = cart.filter(item => item.id !== productId);
         renderCart();
@@ -599,45 +1133,94 @@
     async function submitNewProduct() {
       const name = document.getElementById("newProdName").value.trim();
       const category = document.getElementById("newProdCategory").value;
-      const price = parseFloat(document.getElementById("newProdPrice").value);
-      const stock = parseInt(document.getElementById("newProdStock").value);
-      const image_url = document.getElementById("newProdImage").value.trim() || "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=400&q=80";
+      const priceVal = document.getElementById("newProdPrice").value;
+      const stockVal = document.getElementById("newProdStock").value;
+      const price = parseFloat(priceVal);
+      const stock = parseInt(stockVal);
+      const fileInput = document.getElementById("newProdFile");
+      let image_url = document.getElementById("newProdImage").value.trim();
 
       const token = localStorage.getItem("token");
       const msgBox = document.getElementById("adminMsg");
 
-      if (!name || isNaN(price) || isNaN(stock)) {
-        msgBox.className = "text-xs p-3 rounded-xl mb-4 font-semibold bg-rose-50 text-rose-600 border border-rose-200";
-        msgBox.innerText = "Por favor completa el nombre, precio y stock.";
+      if (!name || priceVal === "" || stockVal === "") {
+        msgBox.className = "text-xs p-3 rounded-xl mb-4 font-semibold bg-rose-50 text-rose-600 border border-rose-200 block";
+        msgBox.innerText = "⚠️ Por favor completa el nombre, precio y stock antes de continuar.";
+        return;
+      }
+
+      if (isNaN(price) || price <= 0) {
+        msgBox.className = "text-xs p-3 rounded-xl mb-4 font-semibold bg-rose-50 text-rose-600 border border-rose-200 block";
+        msgBox.innerText = "⚠️ El precio debe ser un número positivo mayor a $0.00.";
+        return;
+      }
+
+      if (isNaN(stock) || stock < 0) {
+        msgBox.className = "text-xs p-3 rounded-xl mb-4 font-semibold bg-rose-50 text-rose-600 border border-rose-200 block";
+        msgBox.innerText = "⚠️ El stock no puede ser un valor negativo (mínimo 0 unidades).";
         return;
       }
 
       try {
+        if (fileInput.files && fileInput.files[0]) {
+          const formData = new FormData();
+          formData.append("file", fileInput.files[0]);
+          const upRes = await fetch(`${API}/products/upload-image`, {
+            method: "POST",
+            headers: { "Authorization": `Bearer ${token}` },
+            body: formData
+          });
+          const upData = await upRes.json();
+          if (!upRes.ok) {
+            let errorText = upData.detail;
+            if (Array.isArray(errorText)) {
+              errorText = errorText.map(e => e.msg || JSON.stringify(e)).join(", ");
+            }
+            throw new Error(errorText || "Error al subir la imagen");
+          }
+          image_url = upData.url;
+        }
+
+        if (!image_url) {
+          image_url = "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=400&q=80";
+        }
+
         const res = await fetch(`${API}/products/`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`
-          },
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
           body: JSON.stringify({ name, category, price, stock, image_url })
         });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || "Error al crear producto");
+        
+        if (!res.ok) {
+          let errMsg = data.detail;
+          if (Array.isArray(errMsg)) {
+            errMsg = errMsg.map(e => {
+              const field = e.loc ? e.loc[e.loc.length - 1] : "campo";
+              return `${field}: ${e.msg}`;
+            }).join(" | ");
+          } else if (typeof errMsg === "object") {
+            errMsg = JSON.stringify(errMsg);
+          }
+          throw new Error(errMsg || "Error al crear producto");
+        }
 
-        msgBox.className = "text-xs p-3 rounded-xl mb-4 font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200";
-        msgBox.innerText = `¡Producto '${data.name}' agregado con éxito!`;
+        msgBox.className = "text-xs p-3 rounded-xl mb-4 font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 block";
+        msgBox.innerText = `¡Validación exitosa! Producto '${data.name}' agregado al inventario.`;
         
         setTimeout(() => {
-          toggleAdminModal(false);
+          toggleModal("adminProductModal", false);
           msgBox.className = "hidden";
           document.getElementById("newProdName").value = "";
           document.getElementById("newProdPrice").value = "";
           document.getElementById("newProdStock").value = "";
           document.getElementById("newProdImage").value = "";
+          document.getElementById("newProdFile").value = "";
+          document.getElementById("imagePreviewBox").classList.add("hidden");
           loadProducts();
-        }, 800);
+        }, 1000);
       } catch (err) {
-        msgBox.className = "text-xs p-3 rounded-xl mb-4 font-semibold bg-rose-50 text-rose-600 border border-rose-200";
+        msgBox.className = "text-xs p-3 rounded-xl mb-4 font-semibold bg-rose-50 text-rose-600 border border-rose-200 block";
         msgBox.innerText = err.message;
       }
     }
@@ -657,18 +1240,9 @@
       const item = cart.find(x => x.id === id);
       if (!item) return;
       const next = item.quantity + delta;
-      if (next <= 0) {
-        cart = cart.filter(x => x.id !== id);
-      } else if (next > item.maxStock) {
-        alert(`Stock máximo alcanzado (${item.maxStock}).`);
-      } else {
-        item.quantity = next;
-      }
-      renderCart();
-    }
-
-    function removeFromCart(index) {
-      cart.splice(index, 1);
+      if (next <= 0) cart = cart.filter(x => x.id !== id);
+      else if (next > item.maxStock) alert(`Stock máximo alcanzado (${item.maxStock}).`);
+      else item.quantity = next;
       renderCart();
     }
 
@@ -692,7 +1266,7 @@
       }
 
       let subtotal = 0;
-      container.innerHTML = cart.map((i, idx) => {
+      container.innerHTML = cart.map(i => {
         const itemTotal = i.price * i.quantity;
         subtotal += itemTotal;
         return `
@@ -701,23 +1275,18 @@
               <p class="font-bold text-slate-800 leading-tight">${i.name}</p>
               <p class="text-slate-400 mt-0.5">$${i.price.toFixed(2)} c/u</p>
             </div>
-            
             <div class="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200">
               <button onclick="changeQty(${i.id}, -1)" class="w-5 h-5 flex items-center justify-center font-bold text-slate-600 hover:bg-white rounded-lg">-</button>
               <span class="w-5 text-center font-extrabold text-slate-800">${i.quantity}</span>
               <button onclick="changeQty(${i.id}, 1)" class="w-5 h-5 flex items-center justify-center font-bold text-slate-600 hover:bg-white rounded-lg">+</button>
             </div>
-
-            <span class="w-16 text-right font-extrabold text-slate-800 ml-2">
-              $${itemTotal.toFixed(2)}
-            </span>
+            <span class="w-16 text-right font-extrabold text-slate-800 ml-2">$${itemTotal.toFixed(2)}</span>
           </div>
         `;
       }).join("");
 
-      const iva = subtotal * IVA_RATE;
+      const iva = subtotal * currentIvaRate;
       const total = subtotal + iva;
-
       document.getElementById("cartSubtotal").innerText = `$${subtotal.toFixed(2)}`;
       document.getElementById("cartIva").innerText = `$${iva.toFixed(2)}`;
       document.getElementById("cartTotal").innerText = `$${total.toFixed(2)}`;
@@ -740,28 +1309,27 @@
         return;
       }
 
-      const payload = {
-        items: cart.map(i => ({ product_id: i.id, quantity: i.quantity }))
-      };
+      // Validar si eligió transferencia y no subió el comprobante
+      if (currentPaymentMethod === "TRANSFERENCIA" && !transferProofAttached) {
+        statusBox.className = "mt-3 text-xs text-center text-rose-600 font-semibold";
+        statusBox.innerText = "⚠️ Por favor adjunta el comprobante de transferencia antes de confirmar.";
+        return;
+      }
+
+      const payload = { items: cart.map(i => ({ product_id: i.id, quantity: i.quantity })) };
 
       try {
         let res;
         if (currentActiveOrderId) {
           res = await fetch(`${API}/orders/${currentActiveOrderId}`, {
             method: "PUT",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": `Bearer ${token}`
-            },
+            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
             body: JSON.stringify(payload)
           });
         } else {
           res = await fetch(`${API}/orders/`, {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": `Bearer ${token}`
-            },
+            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
             body: JSON.stringify(payload)
           });
         }
@@ -771,8 +1339,7 @@
 
         currentActiveOrderId = data.id;
         currentActiveOrderItems = [...cart];
-
-        showInvoice(data.id, user, currentActiveOrderItems);
+        showInvoice(data.id, user, currentActiveOrderItems, currentPaymentMethod);
         loadProducts();
         statusBox.innerText = "";
       } catch (err) {
@@ -781,11 +1348,12 @@
       }
     }
 
-    function showInvoice(orderId, username, purchasedItems) {
-      const now = new Date();
+    function showInvoice(orderId, username, purchasedItems, paymentMethod = null, orderDate = null) {
+      const now = orderDate ? new Date(orderDate) : new Date();
       document.getElementById("invNumber").innerText = `#FACT-${String(orderId).padStart(5, '0')}`;
       document.getElementById("invClient").innerText = username.toUpperCase();
       document.getElementById("invDate").innerText = now.toLocaleString();
+      document.getElementById("invPayMethod").innerText = paymentMethod || currentPaymentMethod || "EFECTIVO";
 
       let subtotal = 0;
       const itemsTbody = document.getElementById("invItems");
@@ -802,21 +1370,21 @@
         `;
       }).join("");
 
-      const iva = subtotal * IVA_RATE;
+      const iva = subtotal * currentIvaRate;
       const total = subtotal + iva;
+      const percent = Math.round(currentIvaRate * 100);
 
       document.getElementById("invSubtotal").innerText = `$${subtotal.toFixed(2)}`;
+      document.getElementById("invIvaRateText").innerText = `IVA (${percent}%):`;
       document.getElementById("invIva").innerText = `$${iva.toFixed(2)}`;
       document.getElementById("invTotal").innerText = `$${total.toFixed(2)}`;
-
-      document.getElementById("invoiceModal").classList.remove("hidden");
+      toggleModal("invoiceModal", true);
     }
 
     function resumeShoppingWithSameInvoice() {
-      document.getElementById("invoiceModal").classList.add("hidden");
+      toggleModal("invoiceModal", false);
       cart = [...currentActiveOrderItems];
       renderCart();
-
       document.getElementById("editingInvoiceBadge").classList.remove("hidden");
       document.getElementById("editingInvLabel").innerText = `#FACT-${String(currentActiveOrderId).padStart(5, '0')}`;
       document.getElementById("btnCheckoutText").innerText = "Actualizar Misma Factura";
@@ -832,7 +1400,7 @@
     }
 
     function closeInvoice() {
-      document.getElementById("invoiceModal").classList.add("hidden");
+      toggleModal("invoiceModal", false);
       currentActiveOrderId = null;
       currentActiveOrderItems = [];
       cart = [];
@@ -841,6 +1409,8 @@
       document.getElementById("btnCheckoutText").innerText = "Confirmar Compra";
     }
 
+    // Inicializar etiquetas y estado
+    updateIvaLabels();
     renderAuth();
     loadProducts();
   </script>

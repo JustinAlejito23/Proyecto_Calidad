@@ -1,14 +1,19 @@
-from fastapi import APIRouter, Depends, Query, HTTPException, status
+from fastapi import APIRouter, Depends, Query, HTTPException, status, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List, Optional
 import unicodedata
+import os
+import uuid
+import shutil
 from app.database import get_db
 from app import models, schemas, auth
 
 router = APIRouter(prefix="/api/products", tags=["Productos"])
 
-# Diccionario de palabras clave permitidas por categoría
+UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "frontend", "uploads")
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
 ALLOWED_KEYWORDS = {
     "aseo": [
         "jabon", "detergente", "cloro", "desinfectante", "escoba", "trapeador", 
@@ -30,47 +35,57 @@ ALLOWED_KEYWORDS = {
 }
 
 def clean_text(text: str) -> str:
-    """Elimina tildes y convierte a minúsculas para comparar limpiamente."""
     text = text.lower().strip()
     return ''.join(c for c in unicodedata.normalize('NFD', text) if unicodedata.category(c) != 'Mn')
 
 def validate_category_content(name: str, category: str):
     cat = clean_text(category)
     if cat not in ALLOWED_KEYWORDS:
-        raise HTTPException(
-            status_code=400, 
-            detail="Categoría inválida. Solo se permite: aseo, carnes o vegetales."
-        )
+        raise HTTPException(status_code=400, detail="Categoría inválida. Solo se permite: aseo, carnes o vegetales.")
 
     clean_name = clean_text(name)
     keywords = ALLOWED_KEYWORDS[cat]
-
-    # Verificar si el nombre contiene alguna de las palabras clave permitidas
     if not any(kw in clean_name for kw in keywords):
         raise HTTPException(
             status_code=400,
-            detail=f"'{name}' no corresponde a la categoría '{category.upper()}'. Solo se permiten productos reales de este rubro."
+            detail=f"Validación: '{name}' no corresponde a la categoría {category.upper()}. Solo se aceptan productos válidos de esta sección."
         )
 
 @router.get("/", response_model=List[schemas.ProductOut])
 def get_products(
     search: Optional[str] = Query(None),
     category: Optional[str] = Query(None),
+    include_out_of_stock: bool = Query(True),
     db: Session = Depends(get_db)
 ):
     query = db.query(models.Product)
-
+    if not include_out_of_stock:
+        query = query.filter(models.Product.stock > 0)
     if category and category.strip() != "":
         cat_clean = category.strip().lower()
         query = query.filter(func.lower(models.Product.category) == cat_clean)
-
     if search and search.strip() != "":
         s_clean = search.strip()
         query = query.filter(models.Product.name.ilike(f"%{s_clean}%"))
-
     return query.all()
 
-# Endpoint para que el ADMIN agregue productos (con validación estricta)
+# Endpoint para subir archivo físico de imagen (REQ 4)
+@router.post("/upload-image")
+def upload_image(file: UploadFile = File(...), current_user: models.User = Depends(auth.get_current_user)):
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Solo administradores pueden subir imágenes.")
+    
+    file_ext = os.path.splitext(file.filename)[1]
+    if file_ext.lower() not in [".jpg", ".jpeg", ".png", ".webp", ".gif"]:
+        raise HTTPException(status_code=400, detail="Formato de imagen inválido. Use JPG, PNG o WEBP.")
+    
+    filename = f"{uuid.uuid4().hex}{file_ext}"
+    filepath = os.path.join(UPLOAD_DIR, filename)
+    with open(filepath, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    
+    return {"url": f"/static/uploads/{filename}"}
+
 @router.post("/", response_model=schemas.ProductOut, status_code=status.HTTP_201_CREATED)
 def create_product(
     prod_data: schemas.ProductCreate,
@@ -78,9 +93,8 @@ def create_product(
     current_user: models.User = Depends(auth.get_current_user)
 ):
     if not current_user.is_admin:
-        raise HTTPException(status_code=403, detail="Acceso denegado: solo el administrador puede añadir productos.")
+        raise HTTPException(status_code=403, detail="Solo el administrador puede añadir productos.")
 
-    # Validar que el nombre corresponda a la categoría
     validate_category_content(prod_data.name, prod_data.category)
 
     new_prod = models.Product(
@@ -95,7 +109,6 @@ def create_product(
     db.refresh(new_prod)
     return new_prod
 
-# Endpoint para que el ADMIN ELIMINE productos
 @router.delete("/{product_id}", status_code=status.HTTP_200_OK)
 def delete_product(
     product_id: int,
@@ -103,20 +116,12 @@ def delete_product(
     current_user: models.User = Depends(auth.get_current_user)
 ):
     if not current_user.is_admin:
-        raise HTTPException(status_code=403, detail="Acceso denegado: solo el administrador puede eliminar productos.")
-
+        raise HTTPException(status_code=403, detail="Acceso denegado: solo administradores.")
     product = db.query(models.Product).filter(models.Product.id == product_id).first()
     if not product:
         raise HTTPException(status_code=404, detail="El producto no existe.")
 
-    # Verificar si está en pedidos para evitar violar llaves foráneas
-    order_item = db.query(models.OrderItem).filter(models.OrderItem.product_id == product_id).first()
-    if order_item:
-        # Si ya fue comprado, se coloca stock en 0 para no romper historiales de pedidos
-        product.stock = 0
-        db.commit()
-        return {"message": "El producto tiene compras asociadas; su stock se colocó en 0."}
-
+    db.query(models.OrderItem).filter(models.OrderItem.product_id == product_id).delete(synchronize_session=False)
     db.delete(product)
     db.commit()
-    return {"message": f"Producto '{product.name}' eliminado exitosamente."}
+    return {"message": f"Producto '{product.name}' eliminado permanentemente."}

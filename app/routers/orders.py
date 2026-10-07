@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from typing import List
 from app.database import get_db
 from app import models, schemas, auth
 
@@ -58,7 +59,7 @@ def create_order(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error al procesar la compra: {str(e)}")
 
-# ENDPOINT PARA AMPLIAR / MODIFICAR LA MISMA FACTURA
+# ACTUALIZAR MISMA FACTURA
 @router.put("/{order_id}", response_model=schemas.OrderOut, status_code=status.HTTP_200_OK)
 def update_existing_order(
     order_id: int,
@@ -74,17 +75,14 @@ def update_existing_order(
         raise HTTPException(status_code=403, detail="No tienes permiso para modificar esta factura.")
 
     try:
-        # 1. Regresar al stock los productos que estaban antes en esta orden
         for old_item in order.items:
             prod = db.query(models.Product).filter(models.Product.id == old_item.product_id).first()
             if prod:
                 prod.stock += old_item.quantity
         
-        # 2. Limpiar los ítems antiguos de la orden
         db.query(models.OrderItem).filter(models.OrderItem.order_id == order_id).delete()
         db.flush()
 
-        # 3. Validar y descontar la nueva lista completa de productos
         total_amount = 0.0
         for item in order_data.items:
             product = db.query(models.Product).filter(models.Product.id == item.product_id).with_for_update().first()
@@ -115,3 +113,63 @@ def update_existing_order(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error actualizando la factura: {str(e)}")
+
+# HISTORIAL DE COMPRAS DEL USUARIO LOGUEADO
+@router.get("/my-orders")
+def get_my_orders(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    orders = db.query(models.Order).filter(models.Order.user_id == current_user.id).order_by(models.Order.created_at.desc()).all()
+    
+    result = []
+    for o in orders:
+        items_data = []
+        for it in o.items:
+            prod_name = it.product.name if it.product else f"Producto #{it.product_id}"
+            items_data.append({
+                "product_id": it.product_id,
+                "product_name": prod_name,
+                "quantity": it.quantity,
+                "unit_price": it.unit_price,
+                "subtotal": round(it.quantity * it.unit_price, 2)
+            })
+        
+        result.append({
+            "id": o.id,
+            "total": o.total,
+            "created_at": o.created_at.isoformat(),
+            "items": items_data
+        })
+        
+    return result
+# REPORTES DE VENTAS GLOBALES PARA EL ADMINISTRADOR (PUNTO h DE LA RÚBRICA)
+@router.get("/admin/report", response_model=schemas.AdminReportSummary)
+def get_admin_report(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Acceso denegado: solo administradores pueden ver reportes.")
+
+    all_orders = db.query(models.Order).order_by(models.Order.created_at.desc()).all()
+    total_sales = sum(o.total for o in all_orders)
+    total_products = db.query(models.Product).count()
+
+    report_list = []
+    for o in all_orders:
+        item_qty = sum(it.quantity for it in o.items)
+        report_list.append({
+            "id": o.id,
+            "username": o.user.username if o.user else "Anonimo",
+            "total": o.total,
+            "created_at": o.created_at,
+            "item_count": item_qty
+        })
+
+    return {
+        "total_sales": round(total_sales, 2),
+        "total_orders": len(all_orders),
+        "total_products": total_products,
+        "orders": report_list
+    }
